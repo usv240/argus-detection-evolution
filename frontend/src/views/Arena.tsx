@@ -153,14 +153,39 @@ export function Arena() {
         <div className="border-l border-edge flex flex-col min-h-0">
           <div className="p-4 border-b border-edge">
             <div className="text-xs text-muted uppercase tracking-wide mb-1 flex items-center">
-              ARGUS-evolved detection {v.currentSpl ? "(live)" : ""}<InfoTip term="spl" />
+              Detection rule — baseline → evolved<InfoTip term="spl" />
             </div>
-            <pre className="text-[11px] leading-relaxed text-slate-200 whitespace-pre-wrap max-h-72 overflow-auto">
-              {v.currentSpl ?? "—"}
+            {v.baselineSpl && (
+              <>
+                <div className="text-[10px] text-refute mt-1">▸ baseline (starting rule — misses the evasions)</div>
+                <pre className="text-[10px] leading-relaxed text-slate-400 whitespace-pre-wrap max-h-28 overflow-auto">
+                  {v.baselineSpl}
+                </pre>
+              </>
+            )}
+            <div className="text-[10px] text-support mt-2">▸ evolved by ARGUS {v.currentSpl ? "(live)" : ""}</div>
+            <pre className="text-[11px] leading-relaxed text-slate-200 whitespace-pre-wrap max-h-56 overflow-auto">
+              {v.currentSpl ?? "— (evolves once the run starts)"}
             </pre>
             {v.rationale && <p className="text-xs text-muted mt-2">{v.rationale}</p>}
           </div>
           {v.certificate && <Certificate cert={v.certificate} />}
+          {v.searchTrace.length > 0 && (
+            <div className="border-t border-edge p-4">
+              <div className="text-xs text-muted uppercase tracking-wide flex items-center">
+                Splunk searches — {v.searchesRun} via {v.searchProvider}
+                <InfoTip name="Splunk search activity"
+                  text="Every detection run and evidence query executes live against Splunk through the configured provider (Splunk MCP Server, or the SDK fallback). This streams those real searches — proof Splunk is load-bearing, not decorative." />
+              </div>
+              <div className="mt-2 space-y-1 max-h-40 overflow-auto">
+                {v.searchTrace.slice().reverse().map((s: any, i: number) => (
+                  <div key={i} className="text-[10px] font-mono text-muted truncate" title={s.spl}>
+                    <span className="text-accent">{s.provider}</span> · {s.rows} rows · {s.spl}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="flex-1 overflow-auto p-4 text-xs font-mono text-muted space-y-1">
             {v.log.map((l, i) => (
               <div key={i}>{l}</div>
@@ -202,6 +227,13 @@ function Headline({ v }: { v: ReturnType<typeof derive> }) {
             {v.realAttack.final_caught ? "✓ catches the REAL attack in the data" : "✗ misses the real attack"}
             <InfoTip name="Real-attack validation"
               text="Beyond the synthetic evasions, ARGUS also runs the rule against the genuine attack present in the BOTS dataset (the real compromised-credential cryptomining spree). This confirms the hardened rule catches the actual attack, not just the variants ARGUS generated." />
+          </div>
+        )}
+        {v.searchesRun > 0 && (
+          <div className="flex items-center text-slate-300">
+            {v.searchesRun} live Splunk searches via {v.searchProvider}
+            <InfoTip name="Live Splunk searches"
+              text="Count of real searches executed against Splunk during this run, through the configured provider (Splunk MCP Server, or SDK fallback). Splunk is load-bearing — every metric comes from these live searches." />
           </div>
         )}
       </div>
@@ -340,6 +372,10 @@ function derive(events: Ev[]) {
   let coverageMap: any[] = [];
   let certificate: any = null;
   let realAttack: any = null;
+  let baselineSpl: string | undefined;
+  let searchProvider: string | undefined;
+  let searchesRun = 0;
+  const searchTrace: any[] = [];
   const gens = new Map<number, GenView>();
   const log: string[] = [];
 
@@ -353,7 +389,14 @@ function derive(events: Ev[]) {
       case "arena_started":
         scenario = e.scenario;
         baseline = e.baseline;
+        baselineSpl = e.baseline_spl;
+        searchProvider = e.search_provider;
         log.push(`arena started — ${e.generations} generations`);
+        break;
+      case "search":
+        searchesRun = e.n ?? searchesRun;
+        searchProvider = e.provider ?? searchProvider;
+        searchTrace.push({ n: e.n, provider: e.provider, spl: e.spl, rows: e.rows });
         break;
       case "variants_generated":
         G(e.generation).evasions = e.variants.map((x: any) => ({ ...x }));
@@ -396,6 +439,9 @@ function derive(events: Ev[]) {
         coverageMap = e.coverage_map || [];
         certificate = e.certificate || null;
         realAttack = e.real_attack || null;
+        baselineSpl = e.baseline_spl ?? baselineSpl;
+        searchesRun = e.searches_run ?? searchesRun;
+        searchProvider = e.search_provider ?? searchProvider;
         log.push(`finished — baseline ${pct(e.baseline_recall)} → evolved ${pct(e.final_recall)}`);
         break;
       case "error":
@@ -407,7 +453,9 @@ function derive(events: Ev[]) {
 
   return {
     scenario, baseline, currentSpl, rationale, baselineRecall, finalRecall, liveRecall,
-    totalVariants, finalFp, error, frontier, coverageMap, certificate, realAttack, log: log.slice(-40),
+    totalVariants, finalFp, error, frontier, coverageMap, certificate, realAttack,
+    baselineSpl, searchProvider, searchesRun, searchTrace: searchTrace.slice(-14),
+    log: log.slice(-40),
     generations: [...gens.values()].sort((a, b) => a.gen - b.gen),
   };
 }

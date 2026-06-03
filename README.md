@@ -96,6 +96,19 @@ cd frontend && npm install && npm run dev    # http://localhost:5173
 ```
 Open the app → **Run the Arena** → watch the co-evolution stream live.
 
+## Verify it's working (judge quickstart)
+
+1. `GET http://localhost:8801/api/health` → `splunk.connected: true`, `llm_configured: true`,
+   `hec_configured: true`.
+2. `GET http://localhost:8801/api/scenarios` → returns 2 scenarios.
+3. Open http://localhost:5173 → header status dots green → **Launch the Arena** → **Run the Arena**.
+4. Watch: coverage climbs across generations, the **Splunk search activity** panel streams live
+   searches (proof Splunk is load-bearing), the **MITRE coverage map** fills in, real-attack
+   validation shows ✓, and a **Resilience Certificate** appears (downloadable, SHA-256 fingerprint).
+
+Everything is computed live; if any backend is unconfigured the run emits an explicit `error`
+event rather than mock data.
+
 ## Configuration
 
 Environment-driven (`backend/.env`, see [`.env.example`](backend/.env.example)). No secrets committed.

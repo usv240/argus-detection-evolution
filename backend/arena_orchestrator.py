@@ -50,12 +50,40 @@ def _coverage_map(all_variants, base, final, scenario) -> list[dict[str, Any]]:
             for t, d in sorted(tech.items())]
 
 
+class _CountingSearch:
+    """Wraps the real search provider to (a) count every live Splunk search and (b) stream a
+    'search' trace event — so judges can SEE searches flowing through Splunk MCP/SDK (load-bearing,
+    not decorative). Pass-through for any extra provider methods (e.g. MCP generate_spl)."""
+
+    def __init__(self, inner: Any, emit, counter: dict) -> None:
+        self.inner = inner
+        self.name = inner.name
+        self._emit = emit
+        self._counter = counter
+
+    async def run_search(self, spl: str, **kwargs) -> Any:
+        self._counter["n"] += 1
+        rows = await self.inner.run_search(spl, **kwargs)
+        await self._emit({"type": "search", "n": self._counter["n"], "provider": self.name,
+                          "spl": " ".join(spl.split())[:140], "rows": len(rows)})
+        return rows
+
+    async def healthcheck(self) -> Any:
+        return await self.inner.healthcheck()
+
+    def __getattr__(self, item):  # pass through generate_spl, get_indexes, etc.
+        return getattr(self.inner, item)
+
+
 class ArenaOrchestrator:
     def __init__(self, llm: LLM, search: Any, hec: Any) -> None:
-        self.search = search
-        self.red = RedSynthesizer(llm, search, hec)
+        self._llm = llm
+        self._search = search
+        self._hec = hec
         self.blue = BlueEvolver(llm)
-        self.evaluator = Evaluator(search)
+        # red + evaluator are built per-run in run_arena (wrapped with the search counter/tracer).
+        self.red: RedSynthesizer
+        self.evaluator: Evaluator
 
     def _real_src(self, s: Scenario) -> str:
         return f"search index={s.source_index} sourcetype={s.sourcetype}"
@@ -78,9 +106,16 @@ class ArenaOrchestrator:
     async def run_arena(self, scenario: Scenario, generations: int = 3,
                         variants_per_gen: int = 4, refine_attempts: int = 3,
                         stop_on_converge: bool = False, emit: Emit = _noop) -> dict[str, Any]:
-        dist = await scenario.distributions(self.search, scenario)
+        # Wrap the search provider so every live Splunk search is counted + traced to the UI.
+        counter = {"n": 0}
+        search = _CountingSearch(self._search, emit, counter)
+        self.red = RedSynthesizer(self._llm, search, self._hec)
+        self.evaluator = Evaluator(search)
+
+        dist = await scenario.distributions(search, scenario)
         await emit({"type": "arena_started", "scenario": scenario.name,
-                    "baseline": scenario.baseline_name, "generations": generations})
+                    "baseline": scenario.baseline_name, "baseline_spl": scenario.baseline_spl,
+                    "search_provider": self._search.name, "generations": generations})
 
         blue_template = scenario.baseline_spl
         all_variants: list[Variant] = []
@@ -178,6 +213,8 @@ class ArenaOrchestrator:
             "false_positive": final.false_positive if final else None,
             "residual_blind_spots": len(frontier),
             "real_attack_caught": real_attack["final_caught"] if real_attack else None,
+            "live_splunk_searches": counter["n"],
+            "search_provider": self._search.name,
             "mitre_coverage": coverage_map,
             "final_detection_spl": blue_template,
         }
@@ -197,6 +234,8 @@ class ArenaOrchestrator:
             "frontier": frontier,
             "coverage_map": coverage_map,
             "real_attack": real_attack,
+            "searches_run": counter["n"],
+            "search_provider": self._search.name,
             "certificate": certificate,
             "history": history,
         }
@@ -206,8 +245,11 @@ class ArenaOrchestrator:
                     "final_recall": summary["final_recall"],
                     "final_false_positive": summary["final_false_positive"],
                     "final_spl": blue_template,
+                    "baseline_spl": scenario.baseline_spl,
                     "frontier": frontier,
                     "coverage_map": coverage_map,
                     "real_attack": real_attack,
+                    "searches_run": counter["n"],
+                    "search_provider": self._search.name,
                     "certificate": certificate})
         return summary

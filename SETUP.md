@@ -122,8 +122,11 @@ Open http://localhost:5173 — the connection banner shows live Splunk/LLM statu
 ---
 
 ## 7. How it works (at a glance)
-See [architecture_diagram.md](architecture_diagram.md). Five agents (Investigator, Correlator,
-Scorer, Detection Engineer, Replay Verifier) run a plan→act→observe→reflect loop: they generate
-SPL and run it live via MCP, score anomalies, converge on a root cause, propose an improved
-detection, and replay the real attack to measure how much earlier it would fire. Integration
+See [architecture_diagram.md](architecture_diagram.md). An adversarial co-evolution loop:
+**Red (Attack Synthesizer)** invents evasive attack variants (synthetic events sampled from real
+Splunk field distributions, injected via HEC); the **Evaluator** runs the detection live via Splunk
+(MCP or SDK) and measures recall / false positives; **Blue (Detection Evolver)** rewrites the SPL
+detection to catch what evaded — without firing on benign traffic. The **Arena Orchestrator** runs
+this generation after generation, then reports the coverage gain, a MITRE ATT&CK coverage map, a
+resilience certificate, real-attack validation, and the residual blind-spot frontier. Integration
 sources: [REFERENCES.md](REFERENCES.md).
