@@ -1,0 +1,20 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: theme(colors.ink);
+  color: #e2e8f0;
+}
+
+/* Focus visibility for keyboard navigation (accessibility, see design principles). */
+:focus-visible {
+  outline: 2px solid theme(colors.accent);
+  outline-offset: 2px;
+}

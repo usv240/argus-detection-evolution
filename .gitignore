@@ -1,0 +1,24 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.env
+.pytest_cache/
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# Editor / OS
+.DS_Store
+.idea/
+*.log
+
+# Secrets / local (NEVER commit real keys; .env.example is the only env file tracked)
+.env.local
+.env.*.local
+*.local
+*.key
+*.pem
+secrets/
