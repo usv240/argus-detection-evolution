@@ -1,34 +1,106 @@
-# ARGUS — Reference Links (Splunk dev integration)
+# ARGUS — Integration References
 
-Authoritative docs/sources used to build ARGUS's Splunk integration. Code comments point back here.
+Authoritative sources for every external dependency ARGUS uses. Code comments point back here.
 
-## Splunk Developer docs
+---
+
+## Splunk Platform
+
+### Developer docs
 - Developer welcome / guide: https://dev.splunk.com/enterprise/docs/welcome/
 - API reference index: https://dev.splunk.com/enterprise/reference/
+- Developer License (free 10 GB): https://dev.splunk.com/
 
-## Splunk Python SDK (`splunk/sdk_client.py`, `spike_search.py`)
-- SDK overview: https://dev.splunk.com/enterprise/docs/devtools/python/sdk-python
+### Splunk Python SDK (`backend/splunk/sdk_client.py`)
+- Overview: https://dev.splunk.com/enterprise/docs/devtools/python/sdk-python
 - Connect to Splunk: https://dev.splunk.com/enterprise/docs/devtools/python/sdk-python/howtousesplunkpython/howtoconnectpython
-- Run searches and jobs: https://dev.splunk.com/view/SP-CAAAEE5 · https://dev.splunk.com/view/SP-CAAAEHQ
+- Run searches: https://dev.splunk.com/view/SP-CAAAEE5 · https://dev.splunk.com/view/SP-CAAAEHQ
 - `splunklib.client` API ref: https://docs.splunk.com/DocumentationStatic/PythonSDK/1.2.1/client.html
 - SDK repo: https://github.com/splunk/splunk-sdk-python
-- Pattern: `client.connect(...)` → `service.jobs.oneshot(spl, output_mode="json")` → `splunklib.results.JSONResultsReader`.
+- PyPI package: `splunk-sdk` (pinned 2.1.0 in `requirements.txt`)
+- Pattern used: `client.connect(host, port, …)` → `service.jobs.oneshot(spl, output_mode="json")` → `splunklib.results.JSONResultsReader`
 
-## Splunk MCP Server — OFFICIAL (`splunk/mcp_client.py`)
+### Splunk MCP Server (`backend/splunk/mcp_client.py`) — primary agentic path
 - Official repo: https://github.com/CiscoDevNet/Splunk-MCP-Server-official
-- Splunkbase app id: **7931** (built-in app; install into Splunk)
-- Endpoint: `https://<host>:8089/services/mcp` · Transport: HTTP/SSE · Auth: Bearer token · respects RBAC
-- Supported Splunk: 8.0–10.2
-- `authorize.conf`: `[role_mcp_user] mcp_tool_admin=enabled  mcp_tool_execute=enabled`
-- `mcp.conf`: `[mcp] ssl_verify=false` (self-signed dev certs)
-- Tools: `run_splunk_query`, `generate_spl` (AI NL→SPL), `get_indexes`, `get_index_info`, `get_saved_searches`, `get_splunk_info`
-- Splunk blog on MCP TA security: https://www.splunk.com/en_us/blog/security/securing-ai-agents-model-context-protocol.html
+- **Splunkbase app id: 7931** — install into Splunk from https://splunkbase.splunk.com/app/7931
+- Endpoint: `https://<host>:8089/services/mcp` (HTTP/SSE transport)
+- Auth: `Authorization: Bearer <splunk-auth-token>` (respects Splunk RBAC)
+- Supported Splunk versions: 8.0 – 10.2 (ARGUS pins Splunk to 10.2.4)
+- Required `authorize.conf` capabilities: `mcp_tool_admin`, `mcp_tool_execute`
+- `mcp.conf` for self-signed certs: `[mcp] ssl_verify = false`
+- Tools used by ARGUS:
+  - `run_splunk_query` — executes live SPL and returns results (load-bearing: all evals go through this)
+  - `generate_spl` — Splunk's own AI turns natural language into SPL
+  - `get_indexes` — list available indexes
+  - `get_index_info` — per-index metadata (field discovery)
+  - `get_saved_searches` — discover existing detections / ESCU rules
+  - `get_splunk_info` — version + server name (healthcheck)
+- Splunk blog: https://www.splunk.com/en_us/blog/security/securing-ai-agents-model-context-protocol.html
+- MCP Python client (`mcp` SDK, SSE transport): https://github.com/modelcontextprotocol/python-sdk
 
-## Data + detections (real)
-- Boss of the SOC (BOTS v3) dataset: https://github.com/splunk/botsv3
-- Splunk Attack Range (optional): https://github.com/splunk/attack_range
-- Splunk Security Content / ESCU (real baseline detections): https://github.com/splunk/security_content
-- Detection search UI: https://research.splunk.com/
+### Splunk HEC (`backend/splunk/hec.py`)
+- Docs: https://docs.splunk.com/Documentation/Splunk/latest/Data/UsetheHTTPEventCollector
+- Endpoint: `https://<host>:8088/services/collector/event` (JSON batch over HTTPS)
+- Used by Red to write synthetic attack variants into `argus_sandbox` with retry + backoff
 
-## MCP Python client
-- `mcp` Python SDK (SSE client + ClientSession): https://github.com/modelcontextprotocol/python-sdk
+---
+
+## Data & Detections
+
+### Boss of the SOC v3 (BOTS v3)
+- Repo: https://github.com/splunk/botsv3
+- Public download (CC0): `https://botsdataset.s3.amazonaws.com/botsv3/botsv3_data_set.tgz` (~320 MB)
+- Pre-indexed Splunk dataset; 1.94M events; `aws:cloudtrail`, syslog, network streams
+- Data is from **2018–2019** → all ARGUS searches use `earliest=0`
+- Real attacker in the data: IAM user `web_admin`, source IP `139.198.18.205` — cryptomining spray
+
+### Splunk Security Content / ESCU (baseline detection source)
+- Repo: https://github.com/splunk/security_content
+- Detection browse UI: https://research.splunk.com/
+- ARGUS's baseline detections are translated from ESCU logic to raw CloudTrail SPL
+  (no CIM/TA required, so BOTS v3 works without add-ons)
+
+### Splunk Attack Range *(optional, for fresh attack generation)*
+- Repo: https://github.com/splunk/attack_range
+
+---
+
+## Reasoning models
+
+### Anthropic Claude (`backend/models/llm.py`)
+- API: https://console.anthropic.com / https://docs.anthropic.com/
+- Models used:
+  - `claude-sonnet-4-6` — primary agent reasoning (SPL generation, evasion proposals, Blue evolution)
+  - `claude-haiku-4-5-20251001` — fast tier for cheap/narration steps
+- Cost note: `temperature` is deprecated on Opus-class models; ARGUS omits it
+- SDK: `anthropic` (Python), pinned in `requirements.txt`
+
+---
+
+## Frontend
+
+| Library | Version | Purpose |
+|---|---|---|
+| React | 18 | UI framework |
+| TypeScript | 5 | Type safety |
+| Vite | 6 | Dev server + build |
+| Tailwind CSS | 3 | Styling (colorblind-safe palette: blue/amber, not red/green) |
+| Framer Motion | 11 | Motion (causation only, never decoration) |
+| React Flow | 11 | Graph layout (unused in current Arena view; available for future Constellation) |
+
+### Design principles applied
+- **Progressive disclosure** (Nielsen Norman Group) — verdict first, detail on demand via ⓘ
+- **Consistency** (UXPin) — single design system (`components/ui.tsx`); single-source copy (`content.ts`)
+- **Recognition over recall** (Laws of UX) — every term has a plain-English ⓘ tooltip
+- **Accessibility** — ARIA labels, keyboard + Escape-close tooltips, `focus-visible`, WCAG-AA contrast
+- **Colorblind-safe** — diverging blue/amber palette (not red/green)
+
+---
+
+## Hackathon
+
+- Hackathon: Splunk Agentic Ops Hackathon on Devpost — https://splunk.devpost.com/
+- Track: **Security**
+- Entrant: Ujwal Suresh Vanjare
+- Deadline: June 15, 2026, 9:00 AM PDT
+- Prize targets: Best Use of Splunk MCP Server · Best of Security · Grand Prize
