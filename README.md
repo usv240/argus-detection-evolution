@@ -115,6 +115,21 @@ Environment-driven (`backend/.env`, see [`.env.example`](backend/.env.example)).
 `SEARCH_PROVIDER=mcp` (Splunk MCP Server, primary) or `sdk` (Splunk Python SDK, fallback). If a
 backend isn't configured, `/api/arena` emits an explicit error event — never mock data.
 
+## Troubleshooting
+
+Run `python backend/smoke_test.py` (in the venv) — it checks Splunk, a live search, HEC, and the LLM
+and prints PASS/FAIL per piece. Common fixes:
+
+| Symptom | Fix |
+|---|---|
+| `/api/health` shows `splunk.connected: false` | Start Splunk (`docker start splunk`); check `SPLUNK_*` creds in `backend/.env` |
+| Run emits `error: ... not configured` | Set `ANTHROPIC_API_KEY` (LLM) / `SPLUNK_HEC_TOKEN` (HEC) in `.env` |
+| `hec_configured: false` | Enable HEC + create a token (SETUP.md §4); set `SPLUNK_HEC_TOKEN` |
+| Searches return 0 rows | Load BOTS v3 (SETUP.md §3); all searches use `earliest=0` (data is 2018–2019) |
+| `argus_sandbox` errors | Create the index (SETUP.md §2); to reset, delete+recreate it |
+| Backend port in use | Run uvicorn on another port and update `frontend/vite.config.ts` proxy target |
+| Want MCP instead of SDK | Install Splunkbase app 7931, set `SPLUNK_MCP_TOKEN`, `SEARCH_PROVIDER=mcp`, restart (SETUP.md §5) |
+
 ## License
 
 [MIT](LICENSE).

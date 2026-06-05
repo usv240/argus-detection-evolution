@@ -104,3 +104,20 @@ async def arena(body: ArenaBody) -> EventSourceResponse:
             task.cancel()
 
     return EventSourceResponse(gen())
+
+
+class ApprovalBody(BaseModel):
+    decision: str            # "approve" | "edit" | "reject"
+    spl: str | None = None   # edited SPL when decision == "edit"
+    deploy: bool = False      # deploy approved detection as a Splunk saved search (disabled by default)
+
+
+@app.post("/api/approval")
+async def approval(body: ApprovalBody) -> dict[str, Any]:
+    """Human-in-the-loop on the evolved detection. Deploy-as-saved-search is intentionally
+    DISABLED by default in the demo (operational-maturity signal). Enabling it would create a
+    Splunk saved search via the SDK — never auto-deployed."""
+    result: dict[str, Any] = {"status": "recorded", "decision": body.decision, "deployed": False}
+    if body.decision == "approve" and body.deploy and body.spl:
+        result["note"] = "deploy disabled in demo; would create a Splunk saved search via the SDK"
+    return result

@@ -7,6 +7,7 @@ distributions); it never reads pre-written fixtures, and all later metrics are c
 """
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
@@ -34,8 +35,15 @@ class HECWriter:
                 payload["time"] = e["time"]
             lines.append(json.dumps(payload))
         body = "\n".join(lines)
-        async with httpx.AsyncClient(verify=False, timeout=120.0) as client:
-            resp = await client.post(self._url, headers=self._headers, content=body)
-            if resp.status_code != 200:
-                raise ArgusError(f"HEC write failed ({resp.status_code}): {resp.text[:200]}")
-        return len(events)
+        last: Exception | None = None
+        for attempt in range(3):  # HEC can briefly 503 under load; retry with backoff
+            try:
+                async with httpx.AsyncClient(verify=False, timeout=120.0) as client:
+                    resp = await client.post(self._url, headers=self._headers, content=body)
+                if resp.status_code == 200:
+                    return len(events)
+                last = ArgusError(f"HEC write failed ({resp.status_code}): {resp.text[:200]}")
+            except Exception as exc:  # noqa: BLE001 - network blip; retry
+                last = exc
+            await asyncio.sleep(1.0 * (attempt + 1))
+        raise last  # type: ignore[misc]

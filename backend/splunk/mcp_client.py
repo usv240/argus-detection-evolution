@@ -21,6 +21,7 @@ run_splunk_query ("query" assumed); adjust below once verified.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 from contextlib import asynccontextmanager
 from typing import Any
@@ -58,14 +59,20 @@ class MCPSearchProvider:
                 yield session
 
     async def _call(self, tool: str, arguments: dict[str, Any]) -> list[dict[str, Any]]:
-        try:
-            async with self._session() as session:
-                result = await session.call_tool(tool, arguments)
-        except Exception as exc:  # noqa: BLE001 - surface the real MCP error, never fake data
-            raise SearchError(f"MCP call '{tool}' failed: {exc}") from exc
-        if getattr(result, "isError", False):
-            raise SearchError(f"MCP tool '{tool}' returned an error: {result.content}")
-        return _parse_content(result.content)
+        last: Exception | None = None
+        for attempt in range(2):  # one retry for transient SSE/connection blips
+            try:
+                async with self._session() as session:
+                    result = await asyncio.wait_for(session.call_tool(tool, arguments), timeout=120)
+                if getattr(result, "isError", False):
+                    raise SearchError(f"MCP tool '{tool}' returned an error: {result.content}")
+                return _parse_content(result.content)
+            except SearchError:
+                raise
+            except Exception as exc:  # noqa: BLE001 - network/timeout blip; retry then surface
+                last = exc
+                await asyncio.sleep(1.0)
+        raise SearchError(f"MCP call '{tool}' failed after retry: {last}")
 
     # --- SearchProvider protocol ---
     async def run_search(self, spl: str, *, earliest: str | None = None,

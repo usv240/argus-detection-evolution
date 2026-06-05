@@ -81,7 +81,8 @@ class RedSynthesizer:
             ))
         return variants
 
-    def materialize(self, variant: Variant, scenario: Scenario, offset_min: int) -> list[dict[str, Any]]:
+    def materialize(self, variant: Variant, scenario: Scenario, offset_min: int,
+                    run_id: str = "") -> list[dict[str, Any]]:
         """Generic: spread events over the window; scenario.build_event assembles each one."""
         p = variant.params
         rng = random.Random(variant.id)
@@ -104,15 +105,16 @@ class RedSynthesizer:
             event["eventTime"] = _iso(ts)
             event["argus_synthetic"] = "true"
             event["variant_id"] = variant.id
+            event["argus_run"] = run_id
             events.append({"time": ts, "event": event})
         variant.event_count = len(events)
         return events
 
     async def run(self, scenario: Scenario, distributions: dict[str, Any], blue_spl: str,
-                  n: int) -> list[Variant]:
+                  n: int, run_id: str = "") -> list[Variant]:
         variants = await self.propose(scenario, distributions, blue_spl, n)
         for i, v in enumerate(variants):
-            events = self.materialize(v, scenario, offset_min=i * 90)
+            events = self.materialize(v, scenario, offset_min=i * 90, run_id=run_id)
             await self.hec.send(events, index=scenario.sandbox_index)
         return variants
 

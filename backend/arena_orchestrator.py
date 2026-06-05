@@ -50,6 +50,19 @@ def _coverage_map(all_variants, base, final, scenario) -> list[dict[str, Any]]:
             for t, d in sorted(tech.items())]
 
 
+def _variant_changed(v) -> dict[str, Any]:
+    """A compact summary of what the evasion changed — so judges see WHY it's clever."""
+    p = v.params
+    return {
+        "identity": p.get("identity_type"),
+        "source_ips": len(p.get("source_ips") or []),
+        "usernames": len(p.get("usernames") or []),
+        "regions": len(p.get("regions")) if p.get("regions") else None,
+        "window_min": p.get("window_minutes"),
+        "events": p.get("total_events"),
+    }
+
+
 class _CountingSearch:
     """Wraps the real search provider to (a) count every live Splunk search and (b) stream a
     'search' trace event — so judges can SEE searches flowing through Splunk MCP/SDK (load-bearing,
@@ -94,6 +107,20 @@ class ArenaOrchestrator:
         except SearchError:
             return None
 
+    async def _await_ingest(self, s: Scenario, run_id: str, expected: int, timeout: int = 24) -> None:
+        """Poll the sandbox until this run's synthetic events are searchable (reliable > fixed sleep)."""
+        import time as _t
+        deadline = _t.monotonic() + timeout
+        while _t.monotonic() < deadline:
+            await asyncio.sleep(2)
+            try:
+                rows = await self.evaluator.search.run_search(
+                    f'search index={s.sandbox_index} argus_run="{run_id}" | stats count as c', earliest="0")
+                if rows and int(rows[0].get("c", 0) or 0) >= max(1, expected):
+                    return
+            except SearchError:
+                continue
+
     async def _valid_rule(self, s: Scenario, template: str) -> bool:
         if "{src}" not in template:
             return False
@@ -108,6 +135,7 @@ class ArenaOrchestrator:
                         stop_on_converge: bool = False, emit: Emit = _noop) -> dict[str, Any]:
         # Wrap the search provider so every live Splunk search is counted + traced to the UI.
         counter = {"n": 0}
+        run_id = "RUN-" + uuid.uuid4().hex[:8].upper()
         search = _CountingSearch(self._search, emit, counter)
         self.red = RedSynthesizer(self._llm, search, self._hec)
         self.evaluator = Evaluator(search)
@@ -115,7 +143,8 @@ class ArenaOrchestrator:
         dist = await scenario.distributions(search, scenario)
         await emit({"type": "arena_started", "scenario": scenario.name,
                     "baseline": scenario.baseline_name, "baseline_spl": scenario.baseline_spl,
-                    "search_provider": self._search.name, "generations": generations})
+                    "search_provider": self._search.name, "run_id": run_id,
+                    "synthetic_index": scenario.sandbox_index, "generations": generations})
 
         blue_template = scenario.baseline_spl
         all_variants: list[Variant] = []
@@ -124,11 +153,13 @@ class ArenaOrchestrator:
         for gen in range(generations):
             variants = await self.red.run(
                 scenario, dist, blue_template.replace("{src}", self._real_src(scenario)),
-                n=variants_per_gen)
+                n=variants_per_gen, run_id=run_id)
             all_variants += variants
             await emit({"type": "variants_generated", "generation": gen,
-                        "variants": [{"id": v.id, "name": v.name, "evasion": v.evasion} for v in variants]})
-            await asyncio.sleep(INGEST_WAIT)
+                        "variants": [{"id": v.id, "name": v.name, "evasion": v.evasion,
+                                      "description": v.description, "mitre": v.mitre,
+                                      "changed": _variant_changed(v)} for v in variants]})
+            await self._await_ingest(scenario, run_id, sum(v.event_count for v in variants))
 
             shapes = await self.evaluator.profile(scenario, variants)
             res = await self._safe_eval(scenario, blue_template, variants)
@@ -203,6 +234,8 @@ class ArenaOrchestrator:
         # Resilience certificate: a measured before/after artifact with a tamper-evident fingerprint.
         certificate = {
             "id": "ARGUS-CERT-" + uuid.uuid4().hex[:10].upper(),
+            "run_id": run_id,
+            "synthetic_index": scenario.sandbox_index,
             "issued_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "scenario": scenario.name,
             "baseline_detection": scenario.baseline_name,
@@ -251,5 +284,7 @@ class ArenaOrchestrator:
                     "real_attack": real_attack,
                     "searches_run": counter["n"],
                     "search_provider": self._search.name,
+                    "synthetic_index": scenario.sandbox_index,
+                    "run_id": run_id,
                     "certificate": certificate})
         return summary

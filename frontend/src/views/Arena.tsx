@@ -7,12 +7,22 @@ import { InfoTip } from "../components/ui";
 // detection, recall climbs. Every value comes from the backend's live run — nothing seeded.
 type Ev = Record<string, any>;
 
+interface Evasion {
+  id: string;
+  name: string;
+  evasion: string;
+  detected?: boolean;
+  description?: string;
+  mitre?: string[];
+  changed?: Record<string, any>;
+}
 interface GenView {
   gen: number;
-  evasions: { id: string; name: string; evasion: string; detected?: boolean }[];
+  evasions: Evasion[];
   recallBefore?: number;
   recallAfter?: number;
   converged?: boolean;
+  rationale?: string;
 }
 
 export function Arena() {
@@ -86,6 +96,7 @@ export function Arena() {
         {/* left: generations / arms race */}
         <div className="lg:col-span-2 overflow-auto p-6 space-y-4">
           <Headline v={v} />
+          {v.certificate && <ProofPanel v={v} />}
           {v.generations.length === 0 && !running && (
             <div className="bg-panel border border-edge rounded-xl p-6 mt-2">
               <div className="text-base font-semibold text-white">How to read this</div>
@@ -163,11 +174,14 @@ export function Arena() {
                 </pre>
               </>
             )}
-            <div className="text-[10px] text-support mt-2">▸ evolved by ARGUS {v.currentSpl ? "(live)" : ""}</div>
-            <pre className="text-[11px] leading-relaxed text-slate-200 whitespace-pre-wrap max-h-56 overflow-auto">
-              {v.currentSpl ?? "— (evolves once the run starts)"}
-            </pre>
-            {v.rationale && <p className="text-xs text-muted mt-2">{v.rationale}</p>}
+            <div className="text-[10px] text-support mt-2">▸ evolved by ARGUS {v.currentSpl ? "(live)" : ""} — green lines = what Blue added</div>
+            <EvolvedSpl baseline={v.baselineSpl} evolved={v.currentSpl} />
+            {v.rationale && (
+              <p className="text-xs text-muted mt-2">
+                <span className="text-support">Why it catches what the baseline missed: </span>{v.rationale}
+              </p>
+            )}
+            {v.currentSpl && <ApprovalControls spl={v.currentSpl} />}
           </div>
           {v.certificate && <Certificate cert={v.certificate} />}
           {v.searchTrace.length > 0 && (
@@ -176,6 +190,17 @@ export function Arena() {
                 Splunk searches — {v.searchesRun} via {v.searchProvider}
                 <InfoTip name="Splunk search activity"
                   text="Every detection run and evidence query executes live against Splunk through the configured provider (Splunk MCP Server, or the SDK fallback). This streams those real searches — proof Splunk is load-bearing, not decorative." />
+                {v.searchAll.length > 0 && (
+                  <button
+                    onClick={() => downloadJson(
+                      { run_id: v.runId, provider: v.searchProvider, total_searches: v.searchesRun,
+                        generated_at: new Date().toISOString(), searches: v.searchAll },
+                      `argus-search-receipt-${v.runId ?? "run"}.json`)}
+                    className="ml-auto text-[10px] px-2 py-0.5 rounded border border-edge hover:text-white"
+                  >
+                    Download receipt
+                  </button>
+                )}
               </div>
               <div className="mt-2 space-y-1 max-h-40 overflow-auto">
                 {v.searchTrace.slice().reverse().map((s: any, i: number) => (
@@ -264,22 +289,141 @@ function GenerationCard({ g }: { g: GenView }) {
           transition={{ duration: 0.6 }}
         />
       </div>
-      <div className="mt-3 flex flex-wrap gap-2">
+      <div className="mt-3 space-y-2">
         {g.evasions.map((e) => (
-          <span
-            key={e.id}
-            title={e.evasion}
-            className={`text-xs px-2 py-1 rounded border ${
-              e.detected
-                ? "border-support text-support"
-                : "border-refute text-refute"
-            }`}
-          >
-            {e.detected ? "✓ caught" : "✗ evaded"} · {e.name}
-          </span>
+          <div key={e.id} className={`pl-2 border-l-2 ${e.detected ? "border-support" : "border-refute"}`}>
+            <div className="flex items-center gap-2 flex-wrap text-xs">
+              <span className={e.detected ? "text-support" : "text-refute"}>
+                {e.detected ? "✓ caught" : "✗ evaded"}
+              </span>
+              <span className="text-slate-200 font-medium">{e.name}</span>
+              {(e.mitre || []).map((m) => (
+                <span key={m} className="text-[10px] px-1.5 py-0.5 rounded bg-ink border border-edge text-muted">{m}</span>
+              ))}
+            </div>
+            {e.description && (
+              <div className="text-[11px] text-muted mt-0.5">why baseline missed: {e.description}</div>
+            )}
+            {e.changed && (
+              <div className="text-[10px] text-muted font-mono">changed: {summarizeChanged(e.changed)}</div>
+            )}
+          </div>
         ))}
       </div>
+      {g.rationale && (
+        <div className="mt-3 text-xs bg-ink rounded p-2 border border-edge">
+          <span className="text-support font-medium">What Blue learned this round: </span>
+          <span className="text-slate-300">{g.rationale}</span>
+        </div>
+      )}
     </motion.div>
+  );
+}
+
+function summarizeChanged(c: Record<string, any>): string {
+  const p: string[] = [];
+  if (c.identity) p.push(c.identity);
+  if (c.source_ips != null) p.push(`${c.source_ips} IP${c.source_ips === 1 ? "" : "s"}`);
+  if (c.usernames != null) p.push(`${c.usernames} user${c.usernames === 1 ? "" : "s"}`);
+  if (c.regions != null) p.push(`${c.regions} region${c.regions === 1 ? "" : "s"}`);
+  if (c.events != null) p.push(`${c.events} events`);
+  if (c.window_min != null) p.push(`${c.window_min}m window`);
+  return p.join(" · ");
+}
+
+function downloadJson(obj: any, filename: string) {
+  const blob = new Blob([JSON.stringify(obj, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function ProofPanel({ v }: { v: any }) {
+  const rows: [string, any, boolean | undefined][] = [
+    ["Coverage of evasions", `${pct(v.baselineRecall)} → ${pct(v.finalRecall)}`, true],
+    ["False positives", v.finalFp ? "present ⚠" : "0 ✓", !v.finalFp],
+    ["Attack variants tested", v.totalVariants ?? "—", true],
+    ["Real attack caught", v.realAttack ? (v.realAttack.final_caught ? "yes ✓" : "no ✗") : "—", v.realAttack?.final_caught],
+    ["Live Splunk searches", `${v.searchesRun} via ${v.searchProvider}`, true],
+    ["Synthetic index", v.syntheticIndex ?? "—", true],
+    ["Run ID", v.runId ?? "—", true],
+    ["Certificate SHA-256", v.certificate ? `${String(v.certificate.fingerprint).slice(0, 24)}…` : "—", true],
+  ];
+  return (
+    <div className="bg-panel border border-accent rounded-xl p-5">
+      <div className="text-sm font-semibold text-white mb-3">Judge proof — every number computed live</div>
+      <div className="grid sm:grid-cols-2 gap-x-6 gap-y-1.5">
+        {rows.map(([k, val, good], i) => (
+          <div key={i} className="flex justify-between text-sm border-b border-edge/40 pb-1">
+            <span className="text-muted">{k}</span>
+            <span className={good === false ? "text-refute" : "text-slate-200"}>{val}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function EvolvedSpl({ baseline, evolved }: { baseline?: string; evolved?: string }) {
+  if (!evolved) {
+    return <pre className="text-[11px] text-slate-400">— (evolves once the run starts)</pre>;
+  }
+  const baseSet = new Set((baseline || "").split("\n").map((l) => l.trim()).filter(Boolean));
+  return (
+    <pre className="text-[11px] leading-relaxed whitespace-pre-wrap max-h-56 overflow-auto">
+      {evolved.split("\n").map((line, i) => {
+        const added = !!line.trim() && !baseSet.has(line.trim());
+        return (
+          <div key={i} className={added ? "text-support bg-support/10" : "text-slate-300"}>
+            {added ? "+ " : "  "}{line}
+          </div>
+        );
+      })}
+    </pre>
+  );
+}
+
+function ApprovalControls({ spl }: { spl: string }) {
+  const [status, setStatus] = useState("");
+  const [editing, setEditing] = useState(false);
+  const [edited, setEdited] = useState(spl);
+  async function decide(decision: string, body: any = {}) {
+    setStatus("…");
+    try {
+      await fetch("/api/approval", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ decision, ...body }),
+      });
+      setStatus(decision === "approve" ? "Approved ✓ (deploy disabled in demo)"
+        : decision === "reject" ? "Rejected" : "Edit saved");
+    } catch { setStatus("error"); }
+  }
+  return (
+    <div className="mt-3">
+      <div className="text-[10px] text-muted uppercase tracking-wide mb-1">
+        Human review — approve before any deploy (deploy disabled in demo)
+      </div>
+      {!editing ? (
+        <div className="flex gap-2 items-center flex-wrap">
+          <button onClick={() => decide("approve", { spl })} className="text-xs px-2.5 py-1 rounded bg-support text-white">Approve</button>
+          <button onClick={() => setEditing(true)} className="text-xs px-2.5 py-1 rounded border border-edge text-slate-200">Edit</button>
+          <button onClick={() => decide("reject")} className="text-xs px-2.5 py-1 rounded border border-refute text-refute">Reject</button>
+          {status && <span className="text-xs text-muted">{status}</span>}
+        </div>
+      ) : (
+        <div>
+          <textarea value={edited} onChange={(e) => setEdited(e.target.value)}
+            className="w-full h-28 text-[11px] font-mono bg-ink border border-edge rounded p-2 text-slate-200" />
+          <div className="flex gap-2 mt-1">
+            <button onClick={() => { decide("edit", { spl: edited }); setEditing(false); }} className="text-xs px-2.5 py-1 rounded bg-accent text-white">Save edit</button>
+            <button onClick={() => setEditing(false)} className="text-xs px-2.5 py-1 rounded border border-edge text-slate-200">Cancel</button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -375,7 +519,10 @@ function derive(events: Ev[]) {
   let baselineSpl: string | undefined;
   let searchProvider: string | undefined;
   let searchesRun = 0;
+  let syntheticIndex: string | undefined;
+  let runId: string | undefined;
   const searchTrace: any[] = [];
+  const searchAll: any[] = [];
   const gens = new Map<number, GenView>();
   const log: string[] = [];
 
@@ -391,12 +538,15 @@ function derive(events: Ev[]) {
         baseline = e.baseline;
         baselineSpl = e.baseline_spl;
         searchProvider = e.search_provider;
+        syntheticIndex = e.synthetic_index;
+        runId = e.run_id;
         log.push(`arena started — ${e.generations} generations`);
         break;
       case "search":
         searchesRun = e.n ?? searchesRun;
         searchProvider = e.provider ?? searchProvider;
         searchTrace.push({ n: e.n, provider: e.provider, spl: e.spl, rows: e.rows });
+        searchAll.push({ n: e.n, provider: e.provider, spl: e.spl, rows: e.rows });
         break;
       case "variants_generated":
         G(e.generation).evasions = e.variants.map((x: any) => ({ ...x }));
@@ -414,6 +564,7 @@ function derive(events: Ev[]) {
         currentSpl = e.blue_spl;
         rationale = e.rationale;
         liveRecall = e.new_recall;
+        G(e.generation).rationale = e.rationale;
         log.push(`gen ${e.generation} attempt ${e.attempt}: Blue evolved → recall ${pct(e.new_recall)}`);
         break;
       case "blue_attempt_rejected":
@@ -442,6 +593,8 @@ function derive(events: Ev[]) {
         baselineSpl = e.baseline_spl ?? baselineSpl;
         searchesRun = e.searches_run ?? searchesRun;
         searchProvider = e.search_provider ?? searchProvider;
+        syntheticIndex = e.synthetic_index ?? syntheticIndex;
+        runId = e.run_id ?? runId;
         log.push(`finished — baseline ${pct(e.baseline_recall)} → evolved ${pct(e.final_recall)}`);
         break;
       case "error":
@@ -454,7 +607,8 @@ function derive(events: Ev[]) {
   return {
     scenario, baseline, currentSpl, rationale, baselineRecall, finalRecall, liveRecall,
     totalVariants, finalFp, error, frontier, coverageMap, certificate, realAttack,
-    baselineSpl, searchProvider, searchesRun, searchTrace: searchTrace.slice(-14),
+    baselineSpl, searchProvider, searchesRun, syntheticIndex, runId,
+    searchTrace: searchTrace.slice(-14), searchAll,
     log: log.slice(-40),
     generations: [...gens.values()].sort((a, b) => a.gen - b.gen),
   };

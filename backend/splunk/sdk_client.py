@@ -44,7 +44,14 @@ class SDKSearchProvider:
 
     async def run_search(self, spl: str, *, earliest: str | None = None,
                          latest: str | None = None) -> list[dict[str, Any]]:
-        return await asyncio.to_thread(self._run_blocking, spl, earliest, latest)
+        last: Exception | None = None
+        for attempt in range(2):  # one retry to ride out transient connection blips
+            try:
+                return await asyncio.to_thread(self._run_blocking, spl, earliest, latest)
+            except SearchError as exc:
+                last = exc
+                await asyncio.sleep(1.0)
+        raise last  # type: ignore[misc]
 
     async def healthcheck(self) -> dict[str, Any]:
         def _check() -> dict[str, Any]:
