@@ -87,21 +87,21 @@ Then load BOTS v3 + create the `argus_sandbox` index + enable HEC (see [`SETUP.m
 cd backend && python -m venv .venv && .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 copy .env.example .env        # fill in Splunk creds, HEC token, ANTHROPIC_API_KEY
-uvicorn api:app --reload --port 8801
+uvicorn api:app --reload --port 8810
 ```
 
 ### 3. Frontend
 ```bash
-cd frontend && npm install && npm run dev    # http://localhost:5173
+cd frontend && npm install && npm run dev    # http://127.0.0.1:5180
 ```
 Open the app → **Run the Arena** → watch the co-evolution stream live.
 
 ## Verify it's working (judge quickstart)
 
-1. `GET http://localhost:8801/api/health` → `splunk.connected: true`, `llm_configured: true`,
+1. `GET http://127.0.0.1:8810/api/health` → `splunk.connected: true`, `llm_configured: true`,
    `hec_configured: true`.
-2. `GET http://localhost:8801/api/scenarios` → returns 2 scenarios.
-3. Open http://localhost:5173 → header status dots green → **Launch the Arena** → **Run the Arena**.
+2. `GET http://127.0.0.1:8810/api/scenarios` → returns 2 scenarios.
+3. Open http://127.0.0.1:5180 → header status dots green → **Launch the Arena** → **Run the Arena**.
 4. Watch: coverage climbs across generations, the **Splunk search activity** panel streams live
    searches (proof Splunk is load-bearing), the **MITRE coverage map** fills in, real-attack
    validation shows ✓, and a **Resilience Certificate** appears (downloadable, SHA-256 fingerprint).

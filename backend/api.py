@@ -22,7 +22,8 @@ from exceptions import NotConfiguredError
 
 app = FastAPI(title="ARGUS", version="0.2.0")
 app.add_middleware(
-    CORSMiddleware, allow_origins=["http://localhost:5173"], allow_methods=["*"], allow_headers=["*"],
+    CORSMiddleware, allow_origins=["http://localhost:5180", "http://localhost:5173"],
+    allow_methods=["*"], allow_headers=["*"],
 )
 
 

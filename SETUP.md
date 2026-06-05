@@ -30,7 +30,7 @@ docker run -d --name splunk \
   -v splunk-etc:/opt/splunk/etc -v splunk-var:/opt/splunk/var \
   splunk/splunk:10.2.4
 ```
-- Web UI: http://localhost:8000 (`admin` / your password) · mgmt+MCP: `8089` · HEC: `8088`
+- Web UI: http://127.0.0.1:8000 (`admin` / your password) · mgmt+MCP: `8089` · HEC: `8088`
 - Pinned to **10.2.4** for MCP-app compatibility (app 7931 supports Splunk 8.0–10.2).
 - Named volumes persist data across container recreation.
 - *(Native install also works — apps go in `C:\Program Files\Splunk\etc\apps` / `$SPLUNK_HOME/etc/apps`.)*
@@ -38,7 +38,7 @@ docker run -d --name splunk \
 Create the replay sandbox index:
 ```bash
 curl -sk -u admin:<pw> --data-urlencode "name=argus_sandbox" \
-  "https://localhost:8089/services/data/indexes?output_mode=json"
+  "https://127.0.0.1:8089/services/data/indexes?output_mode=json"
 ```
 
 Optional but recommended: request a free **Developer License** (10 GB) at https://dev.splunk.com and
@@ -76,7 +76,7 @@ docker restart splunk
 - Grant your role MCP capabilities in `authorize.conf`: `mcp_tool_admin`, `mcp_tool_execute`.
 - For self-signed dev certs, set `[mcp] ssl_verify = false` in `mcp.conf`.
 - Create a Splunk **auth token** (Settings → Tokens) for `SPLUNK_MCP_TOKEN`.
-- Endpoint: `https://localhost:8089/services/mcp` (HTTP/SSE, `Authorization: Bearer <token>`).
+- Endpoint: `https://127.0.0.1:8089/services/mcp` (HTTP/SSE, `Authorization: Bearer <token>`).
 - Tools used: `run_splunk_query`, `generate_spl`, `get_indexes`, `get_index_info`, `get_saved_searches`.
 
 *(Fallback: set `SEARCH_PROVIDER=sdk` to run searches via the Splunk Python SDK instead of MCP.)*
@@ -90,11 +90,11 @@ python -m venv .venv
 .venv\Scripts\Activate.ps1            # Windows PowerShell  (macOS/Linux: source .venv/bin/activate)
 pip install -r requirements.txt
 copy .env.example .env                 # then fill in real values (see below)
-uvicorn api:app --reload --port 8801
+uvicorn api:app --reload --port 8810
 ```
 Confirm it's wired to real Splunk + LLM:
 ```
-GET http://localhost:8801/api/health
+GET http://127.0.0.1:8810/api/health
 ```
 This reports actual connectivity — if something isn't configured it says so (no mock fallback).
 
@@ -114,9 +114,9 @@ This reports actual connectivity — if something isn't configured it says so (n
 ```bash
 cd frontend
 npm install
-npm run dev                            # http://localhost:5173  (proxies /api -> :8801)
+npm run dev                            # http://127.0.0.1:5180  (proxies /api -> :8810)
 ```
-Open http://localhost:5173 — the connection banner shows live Splunk/LLM status; click
+Open http://127.0.0.1:5180 — the connection banner shows live Splunk/LLM status; click
 **Run investigation** to start a live run on real data.
 
 ---
