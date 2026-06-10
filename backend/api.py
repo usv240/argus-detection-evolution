@@ -22,9 +22,33 @@ from exceptions import NotConfiguredError
 
 app = FastAPI(title="ARGUS", version="0.2.0")
 app.add_middleware(
-    CORSMiddleware, allow_origins=["http://localhost:5180", "http://localhost:5173"],
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5180", "http://localhost:5173",
+        "http://127.0.0.1:5180", "http://127.0.0.1:5173",
+    ],
     allow_methods=["*"], allow_headers=["*"],
 )
+
+
+@app.get("/api/mcp_probe")
+async def mcp_probe() -> dict[str, Any]:
+    """Judge verification: runs a live MCP search via Splunk MCP Server (app 7931).
+    Returns ok=true and a result row to prove MCP is load-bearing, not decorative.
+    """
+    try:
+        from splunk.mcp_client import MCPSearchProvider
+        provider = MCPSearchProvider()
+        rows = await provider.run_search(
+            "search index=_internal | head 1 | fields host, sourcetype", earliest="-5m"
+        )
+        return {"ok": True, "provider": "splunk-mcp", "rows": rows, "mcp_url": settings.splunk_mcp_url}
+    except Exception as exc:
+        causes = []
+        if hasattr(exc, "exceptions"):
+            for sub in exc.exceptions:
+                causes.append(f"{type(sub).__name__}: {sub}")
+        return {"ok": False, "error": str(exc), "causes": causes}
 
 
 @app.get("/api/health")
@@ -41,7 +65,12 @@ async def health() -> dict[str, Any]:
         from splunk.search import get_search_provider
         status["splunk"] = await get_search_provider().healthcheck()
     except Exception as exc:  # noqa: BLE001 - report the real reason it's not ready
-        status["splunk"] = {"connected": False, "reason": str(exc)}
+        causes = []
+        if hasattr(exc, "exceptions"):
+            for sub in exc.exceptions:
+                causes.append(f"{type(sub).__name__}: {sub}")
+        reason = "; ".join(causes) if causes else str(exc)
+        status["splunk"] = {"connected": False, "reason": reason}
     return status
 
 
@@ -78,14 +107,16 @@ async def arena(body: ArenaBody) -> EventSourceResponse:
             from arena_orchestrator import ArenaOrchestrator
             from models.llm import LLM
             from scenarios import SCENARIOS, DEFAULT_SCENARIO
+            from slack_notifier import notify_arena_finished
             from splunk.hec import HECWriter
             from splunk.search import get_search_provider
             scenario = SCENARIOS.get(body.scenario or DEFAULT_SCENARIO, SCENARIOS[DEFAULT_SCENARIO])
             orch = ArenaOrchestrator(LLM(), get_search_provider(), HECWriter())
-            await orch.run_arena(scenario, generations=body.generations,
-                                 variants_per_gen=body.variants_per_gen,
-                                 refine_attempts=body.refine_attempts,
-                                 stop_on_converge=body.stop_on_converge, emit=emit)
+            summary = await orch.run_arena(scenario, generations=body.generations,
+                                           variants_per_gen=body.variants_per_gen,
+                                           refine_attempts=body.refine_attempts,
+                                           stop_on_converge=body.stop_on_converge, emit=emit)
+            asyncio.create_task(notify_arena_finished(summary))
         except NotConfiguredError as exc:
             await emit({"type": "error", "kind": "not_configured", "message": str(exc)})
         except Exception as exc:  # noqa: BLE001 - surface real errors, never hide them
@@ -111,6 +142,8 @@ class ApprovalBody(BaseModel):
     decision: str            # "approve" | "edit" | "reject"
     spl: str | None = None   # edited SPL when decision == "edit"
     deploy: bool = False      # deploy approved detection as a Splunk saved search (disabled by default)
+    run_id: str | None = None
+    scenario: str | None = None
 
 
 @app.post("/api/approval")
@@ -121,4 +154,6 @@ async def approval(body: ApprovalBody) -> dict[str, Any]:
     result: dict[str, Any] = {"status": "recorded", "decision": body.decision, "deployed": False}
     if body.decision == "approve" and body.deploy and body.spl:
         result["note"] = "deploy disabled in demo; would create a Splunk saved search via the SDK"
+    from slack_notifier import notify_approval
+    asyncio.create_task(notify_approval(body.decision, body.run_id, body.scenario))
     return result

@@ -48,9 +48,9 @@ flowchart TB
     end
 
     subgraph SPLUNK["Splunk Enterprise 10.2.4 (Docker, named volumes) — REAL data: BOTS v3 (1.94M events)"]
-        MCP["Splunk MCP Server (app 7931)\ntools: run_splunk_query, generate_spl,\n get_indexes, get_index_info, get_saved_searches"]
+        MCP["Splunk MCP Server (app 7931, v1.2.0)\ntools: splunk_run_query · splunk_get_indexes\n splunk_get_index_info · splunk_run_saved_search\n splunk_get_info"]
         SDK["Splunk Python SDK (fallback)"]
-        HEC["HEC (port 8088)\ninjects synthetic variants"]
+        HEC["HEC (SPLUNK_HEC_URL)\ninjects synthetic variants"]
         IDX[("indexes:\nbotsv3 — real benign + real attack\nargus_sandbox — synthetic variants (per run_id)")]
     end
 
@@ -181,8 +181,9 @@ The engine is **scenario-agnostic**. A `Scenario` carries:
 
 ## How Splunk is used (Splunk-native)
 
-- **Splunk MCP Server (`run_splunk_query`)** — primary search path; every agent SPL runs through it
-- **Splunk MCP Server (`generate_spl`)** — Splunk's own AI, called when available
+- **Splunk MCP Server (`splunk_run_query`)** — primary search path; every agent SPL runs through it (39+ live searches per arena run)
+- **Splunk MCP Server (`splunk_get_indexes`, `splunk_get_index_info`)** — index discovery and field introspection
+- **Splunk MCP Server (`splunk_run_saved_search`, `splunk_get_info`)** — saved-search access and server info
 - **HEC (HTTP Event Collector)** — Red's synthetic variants are written to `argus_sandbox`, with retry
 - **Splunk Python SDK** — fallback search path when MCP is not configured
 - **Baseline detection** — based on real Splunk ESCU / Security Content logic (raw CloudTrail SPL, no CIM add-on needed)

@@ -43,5 +43,10 @@ class Settings(BaseSettings):
     anthropic_model: str = "claude-sonnet-4-6"
     anthropic_model_fast: str = "claude-haiku-4-5-20251001"
 
+    # Slack Incoming Webhook — post arena results + approval gate to the SOC channel.
+    # Leave blank to disable (app starts fine without it).
+    slack_webhook_url: str = ""
+    argus_frontend_url: str = "http://localhost:5180"
+
 
 settings = Settings()

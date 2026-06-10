@@ -8,6 +8,7 @@ export default defineConfig({
     port: 5180,
     proxy: {
       // 127.0.0.1 (not localhost) avoids the Windows IPv6 (::1) vs IPv4 mismatch with the backend.
+      // Must match the --port passed to uvicorn (README default: 8810; change if port is in use)
       "/api": { target: "http://127.0.0.1:8810", changeOrigin: true },
     },
   },
