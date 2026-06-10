@@ -2,8 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  color-scheme: dark;
+:root { color-scheme: dark; }
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  scroll-behavior: smooth;
 }
 
 body {
@@ -13,8 +17,23 @@ body {
   color: #e2e8f0;
 }
 
-/* Focus visibility for keyboard navigation (accessibility, see design principles). */
+/* Slim scrollbar — premium dark feel */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: theme(colors.edge); border-radius: 9999px; }
+::-webkit-scrollbar-thumb:hover { background: theme(colors.muted); }
+
+/* Selection */
+::selection { background: rgba(139, 92, 246, 0.28); color: inherit; }
+
+/* Focus ring */
 :focus-visible {
   outline: 2px solid theme(colors.accent);
   outline-offset: 2px;
+}
+
+/* Monospace for code / SPL */
+code, pre {
+  font-family: "JetBrains Mono", "Cascadia Code", "Fira Code", ui-monospace, monospace;
+  font-feature-settings: "liga" 0;
 }
