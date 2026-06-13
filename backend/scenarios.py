@@ -1,6 +1,6 @@
 """Scenario specs for the Adversarial Detection Evolution Engine.
 
-The engine is scenario-AGNOSTIC: a Scenario carries everything attack-specific — the sourcetype, the
+The engine is scenario-AGNOSTIC: a Scenario carries everything attack-specific - the sourcetype, the
 Blue gen-0 baseline detection, the benign FP scope, how to query real field distributions, how to
 build a synthetic event, and the Red briefing. Adding a new attack family = adding a Scenario; no
 engine code changes. Two are shipped here (both on BOTS v3 CloudTrail, the cleanly-extracted data):

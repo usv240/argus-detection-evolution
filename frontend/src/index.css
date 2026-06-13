@@ -2,8 +2,125 @@
 @tailwind components;
 @tailwind utilities;
 
-:root { color-scheme: dark; }
+/* ── Dark theme (default) ──────────────────────────────────────────────────── */
+:root {
+  color-scheme: dark;
+  --c-ink:        11 15 26;
+  --c-panel:      17 24 39;
+  --c-panel-lo:   14 20 32;
+  --c-edge:       30 45 69;
+  --c-edge-hi:    45 64 96;
+  --c-support:    59 130 246;
+  --c-support-lo: 26 58 106;
+  --c-refute:     245 158 11;
+  --c-refute-lo:  61 39 0;
+  --c-accent:     139 92 246;
+  --c-accent-lo:  45 31 74;
+  --c-muted:      100 116 139;
+  --c-muted-hi:   148 163 184;
+  --c-white:      255 255 255;
+}
 
+/* ── Light theme ───────────────────────────────────────────────────────────── */
+html.light {
+  color-scheme: light;
+  --c-ink:        248 250 252;
+  --c-panel:      255 255 255;
+  --c-panel-lo:   241 245 249;
+  --c-edge:       226 232 240;
+  --c-edge-hi:    203 213 225;
+  --c-support:    37 99 235;
+  --c-support-lo: 219 234 254;
+  --c-refute:     180 83 9;
+  --c-refute-lo:  254 243 199;
+  --c-accent:     109 40 217;
+  --c-accent-lo:  237 233 254;
+  --c-muted:      100 116 139;
+  --c-muted-hi:   71 85 105;
+  --c-white:      15 23 42;
+}
+
+/* ── Light mode: direct class overrides ────────────────────────────────────── */
+/* These kick in immediately via CSS cascade even before Tailwind regenerates.  */
+/* After a dev-server restart the CSS variables above take over; these become   */
+/* redundant but harmless (same computed values).                               */
+
+/* backgrounds */
+html.light body                     { background: #f8fafc; color: #475569; }
+html.light .bg-ink                  { background-color: #f8fafc !important; }
+html.light .bg-panel                { background-color: #ffffff !important; }
+html.light .bg-panel-lo             { background-color: #f1f5f9 !important; }
+html.light .bg-panel\/80            { background-color: rgba(255,255,255,0.80) !important; }
+html.light .bg-ink\/40              { background-color: rgba(248,250,252,0.40) !important; }
+html.light .bg-ink\/50              { background-color: rgba(248,250,252,0.50) !important; }
+html.light .bg-ink\/60              { background-color: rgba(248,250,252,0.60) !important; }
+
+/* edge tints */
+html.light .bg-edge                 { background-color: #e2e8f0 !important; }
+html.light .bg-edge\/15             { background-color: rgba(226,232,240,0.15) !important; }
+html.light .bg-edge\/20             { background-color: rgba(226,232,240,0.20) !important; }
+html.light .bg-edge\/30             { background-color: rgba(226,232,240,0.30) !important; }
+html.light .bg-edge\/40             { background-color: rgba(226,232,240,0.40) !important; }
+html.light .bg-edge\/50             { background-color: rgba(226,232,240,0.50) !important; }
+html.light .bg-edge\/60             { background-color: rgba(226,232,240,0.60) !important; }
+html.light .hover\:bg-edge\/30:hover { background-color: rgba(226,232,240,0.30) !important; }
+html.light .hover\:bg-edge\/60:hover { background-color: rgba(226,232,240,0.60) !important; }
+
+/* semantic tints → light-palette equivalents */
+html.light .bg-accent-lo            { background-color: #ede9fe !important; }
+html.light .bg-accent-lo\/20        { background-color: rgba(237,233,254,0.20) !important; }
+html.light .bg-accent-lo\/30        { background-color: rgba(237,233,254,0.30) !important; }
+html.light .bg-accent-lo\/40        { background-color: rgba(237,233,254,0.40) !important; }
+html.light .bg-support-lo           { background-color: #dbeafe !important; }
+html.light .bg-support-lo\/20       { background-color: rgba(219,234,254,0.20) !important; }
+html.light .bg-support-lo\/30       { background-color: rgba(219,234,254,0.30) !important; }
+html.light .bg-support-lo\/60       { background-color: rgba(219,234,254,0.60) !important; }
+html.light .bg-refute-lo            { background-color: #fef3c7 !important; }
+html.light .bg-refute-lo\/20        { background-color: rgba(254,243,199,0.20) !important; }
+html.light .bg-refute-lo\/30        { background-color: rgba(254,243,199,0.30) !important; }
+html.light .bg-refute-lo\/60        { background-color: rgba(254,243,199,0.60) !important; }
+
+/* borders */
+html.light .border-edge             { border-color: #e2e8f0 !important; }
+html.light .border-edge-hi          { border-color: #cbd5e1 !important; }
+html.light .border-edge\/60         { border-color: rgba(226,232,240,0.60) !important; }
+html.light .border-accent\/10       { border-color: rgba(109,40,217,0.10) !important; }
+html.light .border-accent\/20       { border-color: rgba(109,40,217,0.20) !important; }
+html.light .border-accent\/25       { border-color: rgba(109,40,217,0.25) !important; }
+html.light .border-accent\/30       { border-color: rgba(109,40,217,0.30) !important; }
+html.light .border-accent\/35       { border-color: rgba(109,40,217,0.35) !important; }
+html.light .border-accent\/40       { border-color: rgba(109,40,217,0.40) !important; }
+html.light .border-support\/15      { border-color: rgba(37,99,235,0.15) !important; }
+html.light .border-support\/20      { border-color: rgba(37,99,235,0.20) !important; }
+html.light .border-support\/30      { border-color: rgba(37,99,235,0.30) !important; }
+html.light .border-refute\/30       { border-color: rgba(180,83,9,0.30) !important; }
+html.light .hover\:border-edge-hi:hover { border-color: #cbd5e1 !important; }
+
+/* Solid accent surfaces (primary button, active info-tip) always need literal white
+   text - unlike text-white, which intentionally flips to near-black on light pages. */
+.text-on-accent { color: #fff; }
+
+/* text */
+html.light .text-white              { color: #0f172a !important; }
+html.light .text-muted-hi           { color: #475569 !important; }
+html.light .text-muted              { color: #64748b !important; }
+html.light .text-support            { color: #2563eb !important; }
+html.light .text-refute             { color: #b45309 !important; }
+html.light .text-accent             { color: #6d28d9 !important; }
+html.light .hover\:text-white:hover { color: #0f172a !important; }
+
+/* shadows */
+html.light .shadow-card    { box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04) !important; }
+html.light .shadow-glow-sm { box-shadow: 0 0 22px rgba(109,40,217,0.16) !important; }
+html.light .shadow-glow    { box-shadow: 0 0 36px rgba(109,40,217,0.22) !important; }
+html.light .shadow-glow-b  { box-shadow: 0 0 30px rgba(37,99,235,0.18) !important; }
+
+/* dividers */
+html.light .divide-edge\/30 > :not([hidden]) ~ :not([hidden]) {
+  border-color: rgba(226,232,240,0.30) !important;
+}
+
+/* ── Base ──────────────────────────────────────────────────────────────────── */
 html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -13,26 +130,20 @@ html {
 body {
   margin: 0;
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  background: theme(colors.ink);
-  color: #e2e8f0;
+  background: rgb(var(--c-ink));
+  color: rgb(var(--c-muted-hi));
 }
 
-/* Slim scrollbar — premium dark feel */
+/* Slim scrollbar */
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: theme(colors.edge); border-radius: 9999px; }
-::-webkit-scrollbar-thumb:hover { background: theme(colors.muted); }
+::-webkit-scrollbar-thumb { background: rgb(var(--c-edge)); border-radius: 9999px; }
+::-webkit-scrollbar-thumb:hover { background: rgb(var(--c-muted)); }
 
-/* Selection */
-::selection { background: rgba(139, 92, 246, 0.28); color: inherit; }
+::selection { background: rgba(139, 92, 246, 0.25); color: inherit; }
+:focus-visible { outline: 2px solid rgb(var(--c-accent)); outline-offset: 2px; }
 
-/* Focus ring */
-:focus-visible {
-  outline: 2px solid theme(colors.accent);
-  outline-offset: 2px;
-}
-
-/* Monospace for code / SPL */
+/* Monospace only for actual code */
 code, pre {
   font-family: "JetBrains Mono", "Cascadia Code", "Fira Code", ui-monospace, monospace;
   font-feature-settings: "liga" 0;

@@ -61,3 +61,34 @@ class SDKSearchProvider:
             return await asyncio.to_thread(_check)
         except Exception as exc:  # noqa: BLE001
             raise SearchError(f"SDK healthcheck failed: {exc}") from exc
+
+
+async def create_saved_search(name: str, search: str, *, disabled: bool = True) -> dict[str, Any]:
+    """Create (or update) a Splunk saved search via the Python SDK - Best Use of Splunk
+    Developer Tools, exercised on the human-in-the-loop "Approve & Deploy" path.
+
+    Ships `disabled=1` by default: this only creates the artifact in Splunk so it's
+    visible under Settings -> Searches; a separate human action inside Splunk is
+    required to enable it. ARGUS never auto-runs anything it deploys."""
+    def _create() -> dict[str, Any]:
+        import splunklib.client as client
+        svc = client.connect(
+            host=settings.splunk_host, port=settings.splunk_port,
+            scheme=settings.splunk_scheme, username=settings.splunk_username,
+            password=settings.splunk_password, verify=settings.splunk_verify,
+            app="search",
+        )
+        kwargs = {"disabled": "1" if disabled else "0"}
+        if name in svc.saved_searches:
+            ss = svc.saved_searches[name]
+            ss.update(search=search, **kwargs).refresh()
+            created = False
+        else:
+            ss = svc.saved_searches.create(name, search, **kwargs)
+            created = True
+        return {"name": ss.name, "created": created, "disabled": disabled}
+
+    try:
+        return await asyncio.to_thread(_create)
+    except Exception as exc:  # noqa: BLE001 - surface the real error, never fake success
+        raise SearchError(f"SDK saved-search create failed: {exc}") from exc

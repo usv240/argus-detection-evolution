@@ -1,9 +1,9 @@
-# ARGUS — Architecture Diagram
+# ARGUS - Architecture Diagram
 
-> **Required at repo root by the hackathon rules.** Shows how ARGUS interacts with Splunk, how the
+> **Required at repo root by the submission rules.** Shows how ARGUS interacts with Splunk, how the
 > AI agents and models are integrated, and the data flow between services, APIs, and components.
 >
-> **Design invariant — no hardcoded data:** every value the user sees is computed at runtime from
+> **Design invariant - no hardcoded data:** every value the user sees is computed at runtime from
 > real Splunk searches. The only synthetic data is the Red agent's attack variants, which are
 > *generated at runtime* from real field distributions and clearly labeled `argus_synthetic=true`.
 
@@ -15,7 +15,7 @@ An **Adversarial Detection Evolution Engine**: an attacker AI (Red) and a defend
 co-evolve inside real Splunk data. Red invents attack variants that evade the current detection;
 Blue evolves the detection (SPL) to catch them without firing on benign traffic. Recall is scored
 live each round. The result: a hardened detection, a proven coverage gain, a MITRE ATT&CK coverage
-map, and an honest list of remaining blind spots — all computed from live Splunk data.
+map, and an honest list of remaining blind spots - all computed from live Splunk data.
 
 ---
 
@@ -26,32 +26,33 @@ flowchart TB
     subgraph UI["React UI (Vite + Tailwind + Framer Motion)"]
         LAND["Landing / Home\n(18-term glossary · 4-step how-it-works · ⓘ on every term)"]
         ARENA["Arena view\n(scenario selector · status header)"]
-        PANELS["Arena panels:\n• Coverage headline (0%→X%, FP, real-attack ✓, search count)\n• Judge Proof panel (all measurable facts in one block)\n• Generation cards (per-evasion MITRE · why-missed · changed fields)\n• Baseline→Evolved SPL diff (green added lines + rationale)\n• Approve / Edit / Reject (human-in-the-loop)\n• MITRE coverage map (self-improving bars)\n• Residual frontier (uncaught evasions = blind spots)\n• Resilience Certificate (download + SHA-256 fingerprint)\n• Search activity trace (every live Splunk search streamed)"]
+        PANELS["Arena panels:\n• Coverage headline (0%→X%, FP, real-attack caught/missed, search count)\n• Judge Proof panel (all measurable facts in one block)\n• Generation cards (per-evasion MITRE · why-missed · changed fields)\n• Baseline→Evolved SPL diff (green added lines + rationale)\n• Approve / Edit / Reject (human-in-the-loop)\n• MITRE coverage map (self-improving bars)\n• Residual frontier (uncaught evasions = blind spots)\n• Resilience Certificate (download + SHA-256 fingerprint)\n• Search activity trace (every live Splunk search streamed)"]
     end
 
     subgraph API["FastAPI backend (port 8810)"]
-        HEALTH["GET /api/health\n(live connectivity — no mock)"]
+        HEALTH["GET /api/health\n(live connectivity - no mock; MCP tool probe)"]
         SCENARIOS["GET /api/scenarios\n(returns scenario registry)"]
         ARENA_EP["POST /api/arena  → SSE stream\n(streams: search, variants_generated, generation_scored,\n blue_evolved, converged, arena_finished, ...)"]
-        APPROVAL["POST /api/approval\n(Approve / Edit / Reject — deploy disabled by default)"]
-        ORCH["ArenaOrchestrator\n(generational loop + inner hill-climbing\n run_id · search counter/tracer · ingest poll)"]
+        APPROVAL["POST /api/approval\n(Approve / Edit / Reject - deploy disabled by default)"]
+        EXPORT["POST /api/export_app\n(generates Splunk .spl app bundle with evolved detection\n → auto-runs splunk-appinspect inspect, embeds report,\n returns X-Appinspect-* verdict headers)"]
+        ORCH["ArenaOrchestrator (arena_orchestrator.py)\n(purpose-built async agentic loop:\n plan→act→observe→reflect per generation;\n inner hill-climbing; run_id; _CountingSearch tracer;\n ingest polling; AnomalyScorer wiring)"]
     end
 
     subgraph AGENTS["Agents"]
-        RED["RED — Attack Synthesizer\n(LLM proposes evasions targeting the current rule;\n builds synthetic events from real field distributions;\n materializes via HEC; tags argus_synthetic=true + run_id)"]
+        RED["RED - Attack Synthesizer\n(LLM proposes evasions targeting the current rule;\n builds synthetic events from real field distributions;\n materializes via HEC; tags argus_synthetic=true + run_id)"]
         EVAL["EVALUATOR\n(live SPL recall · FP on real benign · per-variant shape;\n real-attack validation against BOTS attacker)"]
-        BLUE["BLUE — Detection Evolver\n(LLM evolves SPL from real miss-shapes + invariant hints;\n fenced-block SPL; hill-climbing acceptance;\n corrects dotted-field eval quoting)"]
+        BLUE["BLUE - Detection Evolver\n(LLM evolves SPL from real miss-shapes + invariant hints;\n fenced-block SPL; hill-climbing acceptance;\n corrects dotted-field eval quoting)"]
     end
 
     subgraph MODELS["Reasoning (tiered for cost)"]
         LLM["Anthropic Claude\nSonnet 4.6 (primary) · Haiku 4.5 (fast steps)"]
     end
 
-    subgraph SPLUNK["Splunk Enterprise 10.2.4 (Docker, named volumes) — REAL data: BOTS v3 (1.94M events)"]
+    subgraph SPLUNK["Splunk Enterprise 10.2.4 (Docker, named volumes) - REAL data: BOTS v3 (web_admin cryptomining incident, 576 events)"]
         MCP["Splunk MCP Server (app 7931, v1.2.0)\ntools: splunk_run_query · splunk_get_indexes\n splunk_get_index_info · splunk_run_saved_search\n splunk_get_info"]
         SDK["Splunk Python SDK (fallback)"]
         HEC["HEC (SPLUNK_HEC_URL)\ninjects synthetic variants"]
-        IDX[("indexes:\nbotsv3 — real benign + real attack\nargus_sandbox — synthetic variants (per run_id)")]
+        IDX[("indexes:\nbotsv3 - real benign + real attack\nargus_sandbox - synthetic variants (per run_id)")]
     end
 
     LAND <--> ARENA
@@ -60,6 +61,7 @@ flowchart TB
     PANELS -. status .-> HEALTH
     PANELS -. list .-> SCENARIOS
     PANELS -. decision .-> APPROVAL
+    PANELS -. export .-> EXPORT
     ARENA_EP --> ORCH
     ORCH --> RED & EVAL & BLUE
     RED & BLUE -->|reason| LLM
@@ -122,13 +124,13 @@ sequenceDiagram
 | Component | Files | Tech | Role |
 |---|---|---|---|
 | Frontend shell | `App.tsx` | React + TS | Home/Arena nav, status header (Splunk/AI/Inject), footer |
-| Landing page | `views/Landing.tsx` | React | Glossary, 4-step how-it-works, audience — zero-knowledge onboarding |
+| Landing page | `views/Landing.tsx` | React | Glossary, 4-step how-it-works, audience - zero-knowledge onboarding |
 | Arena UI | `views/Arena.tsx` | React + Framer Motion | All 9 panels (coverage, generations, SPL diff, proof, MITRE, etc.) |
-| Design system | `components/ui.tsx` | React | Button, Card, InfoTip (ⓘ), Term — single consistent set |
+| Design system | `components/ui.tsx` | React | Button, Card, InfoTip (ⓘ), Term - single consistent set |
 | Education content | `content.ts` | TS | Single-source glossary (18 terms) + landing copy |
 | Stream client | `api/stream.ts` | TS | SSE-over-POST for `/api/arena` |
-| API | `backend/api.py` | FastAPI + sse-starlette | `/api/arena` (SSE), `/api/health`, `/api/scenarios`, `/api/approval` |
-| Orchestrator | `arena_orchestrator.py` | Python | Generational loop, hill-climbing, run_id, ingest poll, search tracing |
+| API | `backend/api.py` | FastAPI + sse-starlette | `/api/arena` (SSE), `/api/health`, `/api/scenarios`, `/api/approval`, `/api/export_app`, `/api/mcp_probe` |
+| Orchestrator | `arena_orchestrator.py` | Python | Purpose-built async agentic loop (plan→act→observe→reflect); hill-climbing; run_id; ingest polling; `_CountingSearch` tracer |
 | Red | `agents/red_synthesizer.py` | Python + LLM | Proposes evasions, materializes synthetic events, retries HEC |
 | Evaluator | `agents/evaluator.py` | Python | Recall/FP/shape + real-attack validation + variant profiling |
 | Blue | `agents/blue_evolver.py` | Python + LLM | Evolves SPL from miss-shapes + invariant hints, fenced-block parsing |
@@ -136,22 +138,24 @@ sequenceDiagram
 | Search (MCP) | `splunk/mcp_client.py` | Python + `mcp` SDK | Splunk MCP Server client with retry + timeout |
 | Search (SDK) | `splunk/sdk_client.py` | Python + splunklib | SDK fallback with retry |
 | HEC | `splunk/hec.py` | Python + httpx | Writes synthetic variants to `argus_sandbox`, retry + backoff |
-| Reasoning | `models/llm.py` | Python + Anthropic | Claude (tiered): Sonnet primary, Haiku fast — no temperature (rejected by opus-class) |
+| Reasoning | `models/llm.py` | Python + Anthropic | Claude (tiered): Sonnet primary, Haiku fast - no temperature (rejected by opus-class) |
+| Anomaly scorer | `models/scorer.py` | Python + scikit-learn + Splunk MLTK | 4-tier cascade: hosted endpoint → MLTK `\| fit IsolationForest \| apply` → built-in `anomalydetection` → local sklearn; every tier trains on a live per-hour Splunk baseline |
+| App export | `app_export.py` | Python + `splunk-appinspect` | Packages the evolved detection as an installable `.spl` (app.conf, savedsearches.conf disabled, default.meta, README, certificate); auto-runs Splunk AppInspect and embeds `APPINSPECT_REPORT.json` |
 | Smoke test | `smoke_test.py` | Python | Judge quickstart: Splunk + search + HEC + LLM → ALL PASS or fail per piece |
-| Data | Splunk + BOTS v3 | — | 1.94M real `aws:cloudtrail` events (2018–2019); real attack: `web_admin` cryptomining |
+| Data | Splunk + BOTS v3 | - | 576 real `aws:cloudtrail` events (2018–2019), the `web_admin` cryptomining incident; part of the full ~2.08M-event public BOTS v3 dataset |
 
 ---
 
 ## Scenario registry & outputs
 
 The engine is **scenario-agnostic**. A `Scenario` carries:
-- `sourcetype` and `base_filter` — what events to search
-- `baseline_spl` — the starting detection (ESCU-based, raw CloudTrail SPL, uses `{src}` token)
-- `benign_scope` — real benign events (for false-positive measurement)
-- `real_attack_scope` — the real attacker in BOTS (for real-attack validation)
-- `distributions()` — live field-pool query (regions, IPs, instance types)
-- `build_event()` — builds one synthetic CloudTrail event from Red's params
-- `mitre_names` — technique catalog for the coverage map
+- `sourcetype` and `base_filter` - what events to search
+- `baseline_spl` - the starting detection (ESCU-based, raw CloudTrail SPL, uses `{src}` token)
+- `benign_scope` - real benign events (for false-positive measurement)
+- `real_attack_scope` - the real attacker in BOTS (for real-attack validation)
+- `distributions()` - live field-pool query (regions, IPs, instance types)
+- `build_event()` - builds one synthetic CloudTrail event from Red's params
+- `mitre_names` - technique catalog for the coverage map
 
 `SCENARIOS` registers them; `/api/scenarios` lists them; the UI provides a dropdown to select.
 
@@ -159,8 +163,8 @@ The engine is **scenario-agnostic**. A `Scenario` carries:
 
 | Key | Technique | MITRE | Baseline weakness |
 |---|---|---|---|
-| `aws_cryptomining` | Resource Hijacking via valid cloud accounts | T1496 · T1078 · T1535 | Per-username hourly count — misses rate-throttling, IP rotation, multi-region, AssumedRole mimic |
-| `aws_iam_persistence` | Persistence via account creation & manipulation | T1136 · T1098 · T1078 | Per-username IAM-change count — misses rotating actors, throttling, service-identity |
+| `aws_cryptomining` | Resource Hijacking via valid cloud accounts | T1496 · T1078 · T1535 | Per-username hourly count - misses rate-throttling, IP rotation, multi-region, AssumedRole mimic |
+| `aws_iam_persistence` | Persistence via account creation & manipulation | T1136 · T1098 · T1078 | Per-username IAM-change count - misses rotating actors, throttling, service-identity |
 
 **Each run outputs (all computed live):**
 
@@ -181,13 +185,13 @@ The engine is **scenario-agnostic**. A `Scenario` carries:
 
 ## How Splunk is used (Splunk-native)
 
-- **Splunk MCP Server (`splunk_run_query`)** — primary search path; every agent SPL runs through it (39+ live searches per arena run)
-- **Splunk MCP Server (`splunk_get_indexes`, `splunk_get_index_info`)** — index discovery and field introspection
-- **Splunk MCP Server (`splunk_run_saved_search`, `splunk_get_info`)** — saved-search access and server info
-- **HEC (HTTP Event Collector)** — Red's synthetic variants are written to `argus_sandbox`, with retry
-- **Splunk Python SDK** — fallback search path when MCP is not configured
-- **Baseline detection** — based on real Splunk ESCU / Security Content logic (raw CloudTrail SPL, no CIM add-on needed)
-- **Evolved detections** — valid SPL, proposable as Splunk saved searches via the SDK
+- **Splunk MCP Server (`splunk_run_query`)** - primary search path; every agent SPL runs through it (75+ live searches per arena run)
+- **Splunk MCP Server (`splunk_get_indexes`, `splunk_get_index_info`)** - index discovery and field introspection
+- **Splunk MCP Server (`splunk_run_saved_search`, `splunk_get_info`)** - saved-search access and server info
+- **HEC (HTTP Event Collector)** - Red's synthetic variants are written to `argus_sandbox`, with retry
+- **Splunk Python SDK** - fallback search path when MCP is not configured
+- **Baseline detection** - based on real Splunk ESCU / Security Content logic (raw CloudTrail SPL, no CIM add-on needed)
+- **Evolved detections** - valid SPL, proposable as Splunk saved searches via the SDK
 
 All searches are **counted and streamed to the UI** (the search-trace panel) so judges can see
 Splunk is load-bearing, not decorative. The `_CountingSearch` wrapper in `arena_orchestrator.py`

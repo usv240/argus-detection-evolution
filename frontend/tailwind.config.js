@@ -4,19 +4,22 @@ export default {
   theme: {
     extend: {
       colors: {
-        ink:          "#0b0f1a",
-        panel:        "#111827",
-        "panel-lo":   "#0e1420",
-        edge:         "#1e2d45",
-        "edge-hi":    "#2d4060",
-        support:      "#3b82f6",
-        "support-lo": "#1a3a6a",
-        refute:       "#f59e0b",
-        "refute-lo":  "#3d2700",
-        accent:       "#8b5cf6",
-        "accent-lo":  "#2d1f4a",
-        muted:        "#64748b",
-        "muted-hi":   "#94a3b8",
+        // All tokens reference CSS variables so toggling html.light swaps the palette
+        ink:          "rgb(var(--c-ink) / <alpha-value>)",
+        panel:        "rgb(var(--c-panel) / <alpha-value>)",
+        "panel-lo":   "rgb(var(--c-panel-lo) / <alpha-value>)",
+        edge:         "rgb(var(--c-edge) / <alpha-value>)",
+        "edge-hi":    "rgb(var(--c-edge-hi) / <alpha-value>)",
+        support:      "rgb(var(--c-support) / <alpha-value>)",
+        "support-lo": "rgb(var(--c-support-lo) / <alpha-value>)",
+        refute:       "rgb(var(--c-refute) / <alpha-value>)",
+        "refute-lo":  "rgb(var(--c-refute-lo) / <alpha-value>)",
+        accent:       "rgb(var(--c-accent) / <alpha-value>)",
+        "accent-lo":  "rgb(var(--c-accent-lo) / <alpha-value>)",
+        muted:        "rgb(var(--c-muted) / <alpha-value>)",
+        "muted-hi":   "rgb(var(--c-muted-hi) / <alpha-value>)",
+        // white = #fff in dark, #0f172a in light - text-white stays readable everywhere
+        white:        "rgb(var(--c-white) / <alpha-value>)",
       },
       boxShadow: {
         glow:     "0 0 28px rgba(139,92,246,0.20)",

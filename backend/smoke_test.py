@@ -1,4 +1,4 @@
-"""Judge smoke test — verifies the live stack end-to-end in ~10s (no mock data).
+"""Judge smoke test - verifies the live stack end-to-end in ~10s (no mock data).
 
 Run from backend/ with the venv:  python smoke_test.py
 Checks: Splunk connectivity, a live search over BOTS, HEC write path, and the reasoning LLM.

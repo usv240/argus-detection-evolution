@@ -2,7 +2,7 @@
 Injects synthetic BOTS v3 CloudTrail events into the botsv3 index via HEC.
 
 ONLY needed if you don't have the real BOTS v3 dataset.
-If you have the real BOTS v3 app installed, skip this script — the real data is richer.
+If you have the real BOTS v3 app installed, skip this script - the real data is richer.
 
 Pattern mirrors the real BOTS v3 cryptomining spray signature:
 - Attacker: IAM user web_admin, IP 139.198.18.205

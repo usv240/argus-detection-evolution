@@ -1,7 +1,7 @@
 """Reasoning LLM used by agents for planning, SPL generation, and explanations.
 
 This is the agent's 'brain' (Claude). It is separate from the Splunk-native model layer used for
-scoring. Raises NotConfiguredError if no API key is set — agents never emit canned reasoning.
+scoring. Raises NotConfiguredError if no API key is set - agents never emit canned reasoning.
 """
 from __future__ import annotations
 

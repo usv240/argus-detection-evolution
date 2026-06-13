@@ -1,5 +1,5 @@
 """Red (Attack Synthesizer): invents evasive variants of the attack and materializes them as
-SYNTHETIC events in the sandbox — grounded in REAL field distributions queried live.
+SYNTHETIC events in the sandbox - grounded in REAL field distributions queried live.
 
 Scenario-agnostic: the attack briefing, the param schema, and how to build an event all come from
 the Scenario. The LLM proposes evasion strategies; a generic materializer turns each into events via

@@ -22,6 +22,7 @@ from agents.evaluator import Evaluator, EvalResult
 from agents.red_synthesizer import RedSynthesizer, Variant
 from exceptions import ArgusError, SearchError
 from models.llm import LLM
+from models.scorer import AnomalyScorer
 from scenarios import Scenario
 
 Emit = Callable[[dict[str, Any]], Awaitable[None]]
@@ -51,7 +52,7 @@ def _coverage_map(all_variants, base, final, scenario) -> list[dict[str, Any]]:
 
 
 def _variant_changed(v) -> dict[str, Any]:
-    """A compact summary of what the evasion changed — so judges see WHY it's clever."""
+    """A compact summary of what the evasion changed - so judges see WHY it's clever."""
     p = v.params
     return {
         "identity": p.get("identity_type"),
@@ -65,7 +66,7 @@ def _variant_changed(v) -> dict[str, Any]:
 
 class _CountingSearch:
     """Wraps the real search provider to (a) count every live Splunk search and (b) stream a
-    'search' trace event — so judges can SEE searches flowing through Splunk MCP/SDK (load-bearing,
+    'search' trace event - so judges can SEE searches flowing through Splunk MCP/SDK (load-bearing,
     not decorative). Pass-through for any extra provider methods (e.g. MCP generate_spl)."""
 
     def __init__(self, inner: Any, emit, counter: dict) -> None:
@@ -78,7 +79,7 @@ class _CountingSearch:
         self._counter["n"] += 1
         rows = await self.inner.run_search(spl, **kwargs)
         await self._emit({"type": "search", "n": self._counter["n"], "provider": self.name,
-                          "spl": " ".join(spl.split())[:140], "rows": len(rows)})
+                          "spl": " ".join(spl.split()), "rows": len(rows)})
         return rows
 
     async def healthcheck(self) -> Any:
@@ -139,12 +140,21 @@ class ArenaOrchestrator:
         search = _CountingSearch(self._search, emit, counter)
         self.red = RedSynthesizer(self._llm, search, self._hec)
         self.evaluator = Evaluator(search)
+        scorer = AnomalyScorer(search)
 
         dist = await scenario.distributions(search, scenario)
         await emit({"type": "arena_started", "scenario": scenario.name,
                     "baseline": scenario.baseline_name, "baseline_spl": scenario.baseline_spl,
                     "search_provider": self._search.name, "run_id": run_id,
                     "synthetic_index": scenario.sandbox_index, "generations": generations})
+
+        # Train anomaly scorer on real Splunk baseline before first generation.
+        # Falls through MLTK → SPL anomalydetection → sklearn IsolationForest → z-score.
+        try:
+            await scorer.train(scenario)
+            await emit({"type": "scorer_ready", "backend": scorer.source})
+        except Exception:
+            await emit({"type": "scorer_ready", "backend": "disabled"})
 
         blue_template = scenario.baseline_spl
         all_variants: list[Variant] = []
@@ -162,11 +172,27 @@ class ArenaOrchestrator:
             await self._await_ingest(scenario, run_id, sum(v.event_count for v in variants))
 
             shapes = await self.evaluator.profile(scenario, variants)
+            # Anomaly-score each variant's real behavioral shape (live Splunk baseline).
+            anomaly_scores: dict[str, Any] = {}
+            for v in variants:
+                s = shapes.get(v.id)
+                if s:
+                    try:
+                        sc = await scorer.score(s)
+                        if sc:
+                            anomaly_scores[v.id] = {
+                                "value": sc.value,
+                                "source": sc.source,
+                                "detail": sc.detail,
+                            }
+                    except Exception:
+                        pass
             res = await self._safe_eval(scenario, blue_template, variants)
             if res is None:
                 break
             await emit({"type": "generation_scored", "generation": gen, "recall": res.recall,
                         "false_positive": res.false_positive,
+                        "anomaly_scores": anomaly_scores,
                         "outcomes": [asdict(o) for o in res.outcomes]})
 
             # Inner refinement loop: Blue iterates with REAL miss-shape feedback until recall climbs
@@ -208,7 +234,7 @@ class ArenaOrchestrator:
                 await emit({"type": "converged", "generation": gen})
                 if stop_on_converge:
                     break
-                # else: keep going — next generation's Red attacks the EVOLVED rule (escalation).
+                # else: keep going - next generation's Red attacks the EVOLVED rule (escalation).
 
         # Headline: baseline vs final, scored over ALL accumulated variants.
         base = await self._safe_eval(scenario, scenario.baseline_spl, all_variants)
@@ -216,6 +242,23 @@ class ArenaOrchestrator:
         final_outcomes = [asdict(o) for o in final.outcomes] if final else []
         # The residual frontier = evasions the final hardened rule STILL misses (real blind spots).
         frontier = [o for o in final_outcomes if not o["detected"]]
+
+        # Score the frontier variants against Splunk baseline to quantify residual risk.
+        all_shapes = await self.evaluator.profile(scenario, all_variants)
+        all_anomaly_scores: dict[str, Any] = {}
+        for v in all_variants:
+            s = all_shapes.get(v.id)
+            if s:
+                try:
+                    sc = await scorer.score(s)
+                    if sc:
+                        all_anomaly_scores[v.id] = {"value": sc.value, "source": sc.source}
+                except Exception:
+                    pass
+        for o in frontier:
+            if o["id"] in all_anomaly_scores:
+                o["anomaly_score"] = all_anomaly_scores[o["id"]]["value"]
+                o["anomaly_source"] = all_anomaly_scores[o["id"]]["source"]
 
         # Does the rule catch the REAL attack in the data (not just synthetic variants)?
         real_attack = None
@@ -228,7 +271,7 @@ class ArenaOrchestrator:
             real_attack = None
 
         # MITRE ATT&CK coverage map: per technique, how many exercising variants are caught,
-        # baseline vs final. Computed from real outcomes — coverage that self-improves as Blue hardens.
+        # baseline vs final. Computed from real outcomes - coverage that self-improves as Blue hardens.
         coverage_map = _coverage_map(all_variants, base, final, scenario)
 
         # Resilience certificate: a measured before/after artifact with a tamper-evident fingerprint.
@@ -248,6 +291,7 @@ class ArenaOrchestrator:
             "real_attack_caught": real_attack["final_caught"] if real_attack else None,
             "live_splunk_searches": counter["n"],
             "search_provider": self._search.name,
+            "anomaly_scorer_backend": scorer.source,
             "mitre_coverage": coverage_map,
             "final_detection_spl": blue_template,
         }

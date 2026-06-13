@@ -1,11 +1,11 @@
-"""Evaluator: scores a detection (Blue rule) against the synthetic variants + real benign — LIVE.
+"""Evaluator: scores a detection (Blue rule) against the synthetic variants + real benign - LIVE.
 
 For a given detection template (containing the {src} token and emitting `entity` + `detect_time`):
   - FP check: run it scoped to REAL benign events only (should fire on nothing).
   - Per variant: run it scoped to (that variant's synthetic events) + real benign, and check whether
     a flagged `entity` matches one of the variant's known indicators (usernames / source IPs).
 
-Every number — recall, false positives, detection time — is computed by real SPL over Splunk.
+Every number - recall, false positives, detection time - is computed by real SPL over Splunk.
 Nothing is assumed; an undetected variant is a real evasion.
 """
 from __future__ import annotations

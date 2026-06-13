@@ -1,4 +1,4 @@
-"""Splunk MCP Server provider (primary, agentic path) — the load-bearing integration.
+"""Splunk MCP Server provider (primary, agentic path) - the load-bearing integration.
 
 Targets the OFFICIAL Splunk MCP Server (Splunkbase app id 7931, CiscoDevNet/Splunk-MCP-Server-official):
   - Hosted inside Splunk; endpoint:  https://<host>:8089/services/mcp
@@ -106,7 +106,7 @@ class MCPSearchProvider:
 
     async def healthcheck(self) -> dict[str, Any]:
         try:
-            # Use a real lightweight search rather than list_tools() — avoids anyio TaskGroup issues
+            # Use a real lightweight search rather than list_tools() - avoids anyio TaskGroup issues
             rows = await self.run_search(
                 "search index=_internal | head 1 | fields host", earliest="-1m"
             )
@@ -121,10 +121,13 @@ class MCPSearchProvider:
         return await self._call(TOOL_GET_INDEXES, {})
 
     async def get_index_info(self, index: str) -> list[dict[str, Any]]:
-        return await self._call(TOOL_GET_INDEX_INFO, {"index": index})
+        return await self._call(TOOL_GET_INDEX_INFO, {"index_name": index})
 
-    async def get_saved_searches(self) -> list[dict[str, Any]]:
-        return await self._call(TOOL_GET_SAVED_SEARCHES, {})
+    async def run_saved_search(self, name: str) -> list[dict[str, Any]]:
+        return await self._call(TOOL_GET_SAVED_SEARCHES, {"saved_search_name": name})
+
+    async def get_server_info(self) -> list[dict[str, Any]]:
+        return await self._call(TOOL_GET_INFO, {})
 
 
 def _parse_content(content: Any) -> list[dict[str, Any]]:

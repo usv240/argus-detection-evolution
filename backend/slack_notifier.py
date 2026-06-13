@@ -1,8 +1,8 @@
 """Send rich Block Kit notifications to Slack at two moments:
-  1. Arena finishes  — coverage gain, MITRE map, certificate, Approve/Reject buttons
-  2. Analyst decides — confirm the approval/rejection back to the channel
+  1. Arena finishes - coverage gain, MITRE map, certificate, Approve/Reject buttons
+  2. Analyst decides - confirm the approval/rejection back to the channel
 
-Uses an Incoming Webhook (SLACK_WEBHOOK_URL in .env) — no bot token or Slack app
+Uses an Incoming Webhook (SLACK_WEBHOOK_URL in .env) - no bot token or Slack app
 interactive-components setup required. Silently no-ops when the webhook is unset so
 the app starts fine without Slack configured.
 """
@@ -33,7 +33,7 @@ async def _post(payload: dict[str, Any]) -> None:
             resp = await client.post(settings.slack_webhook_url, json=payload)
             if resp.status_code != 200:
                 log.warning("Slack webhook %s: %s", resp.status_code, resp.text[:120])
-    except Exception as exc:  # noqa: BLE001 — Slack is non-critical; never crash the arena
+    except Exception as exc:  # noqa: BLE001 - Slack is non-critical; never crash the arena
         log.warning("Slack notification failed (non-fatal): %s", exc)
 
 
@@ -59,15 +59,15 @@ async def notify_arena_finished(summary: dict[str, Any]) -> None:
         for c in cmap[:5]
     ) or "N/A"
 
-    fp_line = "✅ 0 false positives" if not fp else "⚠️ False positives present"
-    real_line = "✓ Real attack caught" if real.get("final_caught") else "✗ Real attack not confirmed"
+    fp_line = "0 false positives" if not fp else "False positives present"
+    real_line = "Real attack caught" if real.get("final_caught") else "Real attack not confirmed"
     blind_line = (f"{len(frontier)} residual blind spot{'s' if len(frontier) != 1 else ''}"
-                  if frontier else "✅ 0 blind spots")
+                  if frontier else "0 blind spots")
 
     url = _frontend()
     blocks: list[dict] = [
         {"type": "header",
-         "text": {"type": "plain_text", "text": "🛡️ ARGUS Arena Complete — Detection Hardened"}},
+         "text": {"type": "plain_text", "text": "ARGUS Arena Complete - Detection Hardened"}},
         {"type": "section",
          "fields": [
              {"type": "mrkdwn", "text": f"*Scenario*\n{scenario}"},
@@ -93,10 +93,10 @@ async def notify_arena_finished(summary: dict[str, Any]) -> None:
               "url": url,
               "style": "primary"},
              {"type": "button",
-              "text": {"type": "plain_text", "text": "✅ Approve & Deploy"},
+              "text": {"type": "plain_text", "text": "Approve & Deploy"},
               "url": f"{url}?action=approve&run={run_id}"},
              {"type": "button",
-              "text": {"type": "plain_text", "text": "❌ Reject"},
+              "text": {"type": "plain_text", "text": "Reject"},
               "url": f"{url}?action=reject&run={run_id}",
               "style": "danger"},
          ]},
@@ -108,7 +108,7 @@ async def notify_arena_finished(summary: dict[str, Any]) -> None:
     ]
 
     await _post({
-        "text": f"🛡️ ARGUS: {scenario} — {baseline_pct}% → {final_pct}% coverage | {fp_line}",
+        "text": f"ARGUS: {scenario} - {baseline_pct}% → {final_pct}% coverage | {fp_line}",
         "blocks": blocks,
     })
 
@@ -117,10 +117,9 @@ async def notify_approval(decision: str, run_id: str | None, scenario: str | Non
     """Post a follow-up when the analyst approves/rejects via ARGUS."""
     if not settings.slack_webhook_url:
         return
-    icon = {"approve": "✅", "edit": "✏️", "reject": "❌"}.get(decision, "ℹ️")
     verb = {"approve": "approved for deployment", "edit": "approved with edits",
             "reject": "rejected"}.get(decision, decision)
-    text = f"{icon} ARGUS detection"
+    text = "ARGUS detection"
     if scenario:
         text += f" for *{scenario}*"
     if run_id:

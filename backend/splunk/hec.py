@@ -1,4 +1,4 @@
-"""HEC writer — injects the Red agent's synthetic adversarial variants into the sandbox index.
+"""HEC writer - injects the Red agent's synthetic adversarial variants into the sandbox index.
 
 Events are SYNTHETIC but structured exactly like real CloudTrail and tagged `argus_synthetic="true"`
 + `variant_id`, so the same detection SPL matches them and the UI labels them clearly. This is

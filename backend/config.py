@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     splunk_index: str = "botsv3"
     splunk_sandbox_index: str = "argus_sandbox"
 
-    # HEC — write path for synthetic adversarial variants into the sandbox (Red agent)
+    # HEC - write path for synthetic adversarial variants into the sandbox (Red agent)
     splunk_hec_url: str = "https://localhost:8088/services/collector/event"
     splunk_hec_token: str = ""
 
@@ -32,8 +32,12 @@ class Settings(BaseSettings):
     # Provider selection
     search_provider: str = "mcp"  # "mcp" | "sdk"
 
-    # Scorer model layer (set after the SETUP.md Step 6 spike)
-    scorer_backend: str = ""  # "hosted" | "local"
+    # Anomaly scorer model layer. "local" trains a scikit-learn IsolationForest on a live
+    # Splunk baseline query (default - always available). "splunk_mltk" tries Splunk MLTK's
+    # |fit/|apply IsolationForest first (falls back to "local" if MLTK isn't installed).
+    # "splunk_spl" tries the built-in |anomalydetection command. "hosted" calls an external
+    # model-serving REST endpoint (e.g. MLTK Container for AI/Splunk App for Data Science).
+    scorer_backend: str = "local"  # "local" | "splunk_mltk" | "splunk_spl" | "hosted"
     scorer_hosted_endpoint: str = ""
     scorer_hosted_model: str = ""
 
@@ -43,7 +47,7 @@ class Settings(BaseSettings):
     anthropic_model: str = "claude-sonnet-4-6"
     anthropic_model_fast: str = "claude-haiku-4-5-20251001"
 
-    # Slack Incoming Webhook — post arena results + approval gate to the SOC channel.
+    # Slack Incoming Webhook - post arena results + approval gate to the SOC channel.
     # Leave blank to disable (app starts fine without it).
     slack_webhook_url: str = ""
     argus_frontend_url: str = "http://localhost:5180"
