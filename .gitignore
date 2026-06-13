@@ -24,3 +24,5 @@ dist/
 *.key
 *.pem
 secrets/
+
+transcript.srt

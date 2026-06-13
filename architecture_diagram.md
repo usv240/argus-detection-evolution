@@ -67,9 +67,9 @@ flowchart TB
     RED & BLUE -->|reason| LLM
     RED -->|write synthetic events + run_id| HEC
     RED -->|query real distributions| MCP
-    RED -->|query real distributions (fallback)| SDK
+    RED -->|query real distributions, fallback| SDK
     EVAL -->|run detection SPL + score| MCP
-    EVAL -->|run detection SPL + score (fallback)| SDK
+    EVAL -->|run detection SPL + score, fallback| SDK
     HEC --> IDX
     MCP --- IDX
     SDK --- IDX

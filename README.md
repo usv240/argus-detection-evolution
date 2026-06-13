@@ -89,8 +89,71 @@ The registry (`backend/scenarios.py`) supports more. Endpoint/identity scenarios
 
 ## Architecture
 
-See [`architecture_diagram.md`](architecture_diagram.md) for full Mermaid diagrams.
-Integration docs: [`REFERENCES.md`](REFERENCES.md).
+ARGUS is a small FastAPI backend, a React frontend, and an orchestrator that runs three agents,
+Red, Blue, and an Evaluator, in rounds against real Splunk data. Red looks for ways around the
+current detection rule, the Evaluator tests the rule for real, and Blue rewrites it to close the
+gap. This repeats for a few rounds, with each round building on the last.
+
+```mermaid
+flowchart TB
+    subgraph UI["React UI (Vite + Tailwind + Framer Motion)"]
+        LAND["Landing / Home\n(18-term glossary · 4-step how-it-works · ⓘ on every term)"]
+        ARENA["Arena view\n(scenario selector · status header)"]
+        PANELS["Arena panels:\n• Coverage headline (0%→X%, FP, real-attack caught/missed, search count)\n• Judge Proof panel (all measurable facts in one block)\n• Generation cards (per-evasion MITRE · why-missed · changed fields)\n• Baseline→Evolved SPL diff (green added lines + rationale)\n• Approve / Edit / Reject (human-in-the-loop)\n• MITRE coverage map (self-improving bars)\n• Residual frontier (uncaught evasions = blind spots)\n• Resilience Certificate (download + SHA-256 fingerprint)\n• Search activity trace (every live Splunk search streamed)"]
+    end
+
+    subgraph API["FastAPI backend (port 8810)"]
+        HEALTH["GET /api/health\n(live connectivity - no mock; MCP tool probe)"]
+        SCENARIOS["GET /api/scenarios\n(returns scenario registry)"]
+        ARENA_EP["POST /api/arena  → SSE stream\n(streams: search, variants_generated, generation_scored,\n blue_evolved, converged, arena_finished, ...)"]
+        APPROVAL["POST /api/approval\n(Approve / Edit / Reject - deploy disabled by default)"]
+        EXPORT["POST /api/export_app\n(generates Splunk .spl app bundle with evolved detection\n → auto-runs splunk-appinspect inspect, embeds report,\n returns X-Appinspect-* verdict headers)"]
+        ORCH["ArenaOrchestrator (arena_orchestrator.py)\n(purpose-built async agentic loop:\n plan→act→observe→reflect per generation;\n inner hill-climbing; run_id; _CountingSearch tracer;\n ingest polling; AnomalyScorer wiring)"]
+    end
+
+    subgraph AGENTS["Agents"]
+        RED["RED - Attack Synthesizer\n(LLM proposes evasions targeting the current rule;\n builds synthetic events from real field distributions;\n materializes via HEC; tags argus_synthetic=true + run_id)"]
+        EVAL["EVALUATOR\n(live SPL recall · FP on real benign · per-variant shape;\n real-attack validation against BOTS attacker)"]
+        BLUE["BLUE - Detection Evolver\n(LLM evolves SPL from real miss-shapes + invariant hints;\n fenced-block SPL; hill-climbing acceptance;\n corrects dotted-field eval quoting)"]
+    end
+
+    subgraph MODELS["Reasoning (tiered for cost)"]
+        LLM["Anthropic Claude\nSonnet 4.6 (primary) · Haiku 4.5 (fast steps)"]
+    end
+
+    subgraph SPLUNK["Splunk Enterprise 10.2.4 (Docker, named volumes) - REAL data: BOTS v3 (web_admin cryptomining incident, 576 events)"]
+        MCP["Splunk MCP Server (app 7931, v1.2.0)\ntools: splunk_run_query · splunk_get_indexes\n splunk_get_index_info · splunk_run_saved_search\n splunk_get_info"]
+        SDK["Splunk Python SDK (fallback)"]
+        HEC["HEC (SPLUNK_HEC_URL)\ninjects synthetic variants"]
+        IDX[("indexes:\nbotsv3 - real benign + real attack\nargus_sandbox - synthetic variants (per run_id)")]
+    end
+
+    LAND <--> ARENA
+    ARENA --> PANELS
+    PANELS <-->|SSE + commands| ARENA_EP
+    PANELS -. status .-> HEALTH
+    PANELS -. list .-> SCENARIOS
+    PANELS -. decision .-> APPROVAL
+    PANELS -. export .-> EXPORT
+    ARENA_EP --> ORCH
+    ORCH --> RED & EVAL & BLUE
+    RED & BLUE -->|reason| LLM
+    RED -->|write synthetic events + run_id| HEC
+    RED -->|query real distributions| MCP
+    RED -->|query real distributions, fallback| SDK
+    EVAL -->|run detection SPL + score| MCP
+    EVAL -->|run detection SPL + score, fallback| SDK
+    HEC --> IDX
+    MCP --- IDX
+    SDK --- IDX
+```
+
+- [docs/architecture.md](docs/architecture.md): a plain-English walkthrough, with a simple diagram
+  and a worked example
+- [docs/adr/](docs/adr/): short write-ups of why the system is built this way
+- [`architecture_diagram.md`](architecture_diagram.md): the co-evolution sequence diagram,
+  a components table, and the scenario registry (required at the repo root by the hackathon rules)
+- [`REFERENCES.md`](REFERENCES.md): Splunk SDK / MCP integration docs
 
 ```
 argus/
@@ -99,6 +162,9 @@ argus/
 ├── SETUP.md                        step-by-step setup guide
 ├── REFERENCES.md                   Splunk SDK / MCP / data reference links
 ├── architecture_diagram.md         (rules-required) system + data-flow diagrams
+├── docs/
+│   ├── architecture.md             plain-English architecture walkthrough
+│   └── adr/                        decision records (why we built it this way)
 │
 ├── backend/
 │   ├── api.py                      FastAPI: /api/arena (SSE) /api/health /api/mcp_probe /api/scenarios /api/export_app /api/approval
